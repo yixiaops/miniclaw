@@ -59,7 +59,7 @@ export interface Config {
  */
 const DEFAULT_CONFIG: Omit<Config, 'bailian'> & { bailian: Omit<BailianConfig, 'apiKey'> } = {
   bailian: {
-    model: 'qwen-turbo',
+    model: 'qwen-plus',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
   },
   server: {
