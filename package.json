@@ -1,0 +1,38 @@
+{
+  "name": "miniclaw",
+  "version": "0.1.0",
+  "description": "Lightweight personal AI assistant",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "llm",
+    "mcp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@mariozechner/pi-ai": "^0.57.1",
+    "@mariozechner/pi-tui": "^0.57.1"
+  }
+}
