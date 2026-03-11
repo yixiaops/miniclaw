@@ -39,7 +39,7 @@ function createBailianModel(config: Config) {
     provider: 'bailian',
     baseUrl: config.bailian.baseUrl,
     reasoning: false,
-    input: ['text', 'image'] as const,
+    input: ['text', 'image'] as ('text' | 'image')[],
     cost: {
       input: 0,
       output: 0,
@@ -68,12 +68,14 @@ export class MiniclawAgent {
     this.config = config;
     this.currentModel = config.bailian.model;
 
-    // 创建底层 Agent
+    // 创建底层 Agent - 不传递空 tools 数组
+    const initialTools = options?.tools && options.tools.length > 0 ? options.tools : undefined;
+    
     this.agent = new Agent({
       initialState: {
         systemPrompt: options?.systemPrompt || DEFAULT_SYSTEM_PROMPT,
         model: createBailianModel(config),
-        tools: options?.tools || [],
+        tools: initialTools,
         thinkingLevel: 'off',
         messages: [],
         isStreaming: false,
@@ -138,8 +140,25 @@ export class MiniclawAgent {
    * 发送消息并获取响应
    */
   async chat(input: string): Promise<{ content: string }> {
-    await this.agent.prompt(input);
+    // 收集流式响应内容
+    let fullContent = '';
+    
+    const unsubscribe = this.agent.subscribe((event: any) => {
+      if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
+        fullContent += event.assistantMessageEvent.delta;
+      }
+    });
 
+    await this.agent.prompt(input);
+    
+    unsubscribe();
+
+    // 优先返回收集到的流式内容
+    if (fullContent) {
+      return { content: fullContent };
+    }
+
+    // 回退到从消息历史读取
     const messages = this.agent.state.messages;
     const lastMessage = messages[messages.length - 1];
 

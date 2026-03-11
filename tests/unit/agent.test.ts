@@ -19,6 +19,7 @@ vi.mock('@mariozechner/pi-agent-core', () => ({
       streamMessage: null,
       pendingToolCalls: new Set()
     };
+    private _subscribers: Function[] = [];
 
     constructor(opts?: any) {
       if (opts?.initialState?.systemPrompt) {
@@ -46,7 +47,10 @@ vi.mock('@mariozechner/pi-agent-core', () => ({
     }
 
     subscribe(fn: Function) {
-      return () => {};
+      this._subscribers.push(fn);
+      return () => {
+        this._subscribers = this._subscribers.filter(s => s !== fn);
+      };
     }
 
     async prompt(input: string) {
@@ -56,9 +60,24 @@ vi.mock('@mariozechner/pi-agent-core', () => ({
         content: input,
         timestamp: Date.now()
       });
+      
+      // Simulate streaming by emitting text_delta events
+      const mockResponse = 'Hello! How can I help you today?';
+      for (const char of mockResponse) {
+        for (const fn of this._subscribers) {
+          fn({
+            type: 'message_update',
+            assistantMessageEvent: {
+              type: 'text_delta',
+              delta: char
+            }
+          });
+        }
+      }
+      
       this._state.messages.push({
         role: 'assistant',
-        content: [{ type: 'text', text: 'Mock response' }],
+        content: [{ type: 'text', text: mockResponse }],
         api: 'openai-completions',
         provider: 'bailian',
         model: 'qwen-turbo',
@@ -132,7 +151,7 @@ describe('MiniclawAgent', () => {
       const response = await agent.chat('Hello');
 
       expect(response).toBeDefined();
-      expect(response.content).toBe('Mock response');
+      expect(response.content).toBe('Hello! How can I help you today?');
     });
 
     it('should maintain conversation history', async () => {

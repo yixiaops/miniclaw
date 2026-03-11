@@ -33,7 +33,7 @@ describe('Config', () => {
 
       const config = loadConfig();
 
-      expect(config.bailian.model).toBe('qwen-turbo');
+      expect(config.bailian.model).toBe('qwen-plus');
     });
 
     it('should throw error if API key is missing', () => {

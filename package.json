@@ -2,7 +2,6 @@
   "name": "miniclaw",
   "version": "0.1.0",
   "description": "Lightweight personal AI assistant",
-  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -12,7 +11,12 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "start:cli": "node dist/index.js cli",
+    "start:api": "node dist/index.js api",
+    "start:feishu": "node dist/index.js feishu",
+    "start:web": "node dist/index.js web",
+    "start:all": "node dist/index.js all"
   },
   "keywords": [
     "ai",
@@ -34,6 +38,10 @@
     "@mariozechner/pi-agent-core": "^0.57.1",
     "@mariozechner/pi-ai": "^0.57.1",
     "@mariozechner/pi-tui": "^0.57.1",
-    "dotenv": "^17.3.1"
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.4.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
   }
 }
