@@ -2,7 +2,6 @@
  * 配置模块
  * 管理应用配置，支持环境变量加载
  */
-import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 

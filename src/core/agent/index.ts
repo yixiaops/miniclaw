@@ -3,7 +3,7 @@
  * 基于 pi-agent-core 封装，适配阿里云百炼
  */
 import { Agent, type AgentTool, type AgentMessage } from '@mariozechner/pi-agent-core';
-import { streamSimple, Type } from '@mariozechner/pi-ai';
+import { streamSimple } from '@mariozechner/pi-ai';
 import type { Config } from '../config.js';
 
 /**

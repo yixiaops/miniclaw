@@ -7,17 +7,26 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "precommit": "npm run lint && npm run typecheck && npm test",
     "start": "node dist/index.js",
     "start:cli": "node dist/index.js cli",
     "start:api": "node dist/index.js api",
     "start:feishu": "node dist/index.js feishu",
     "start:web": "node dist/index.js web",
-    "start:all": "node dist/index.js all"
+    "start:all": "node dist/index.js all",
+    "debug:cli": "node --import tsx src/index.ts cli",
+    "debug:api": "node --import tsx src/index.ts api",
+    "debug:web": "node --import tsx src/index.ts web"
   },
   "keywords": [
     "ai",
@@ -31,7 +40,14 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },

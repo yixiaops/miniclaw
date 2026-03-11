@@ -1,27 +1,59 @@
 /**
- * CLI 通道
- * 命令行交互界面
+ * @fileoverview CLI 通道 - 命令行交互界面
+ * @module channels/cli
+ * @author Miniclaw Team
+ * @created 2026-03-10
  */
+
 import * as readline from 'readline';
 import type { MiniclawAgent } from '../core/agent/index.js';
+import { handleCliCommand } from './cli-commands.js';
+import { globalLifecycle } from '../core/lifecycle.js';
 
 /**
  * CLI 通道类
+ * 
+ * 提供命令行交互界面，支持：
+ * - 与 AI 对话
+ * - 执行内置命令（/help、/exit 等）
+ * - 流式输出
+ * 
+ * @example
+ * ```ts
+ * const cli = new CliChannel(agent);
+ * await cli.start();
+ * ```
+ * 
+ * @class
+ * @public
  */
-export class CliChannel {
+export class CliChannel implements Channel {
+  /** Agent 实例 */
   private agent: MiniclawAgent;
+  /** readline 接口 */
   private rl: readline.Interface | null = null;
+  /** 是否运行中 */
   private running = false;
 
+  /**
+   * 创建 CLI 通道实例
+   * 
+   * @param agent - Miniclaw Agent 实例
+   */
   constructor(agent: MiniclawAgent) {
     this.agent = agent;
   }
 
   /**
    * 启动 CLI 界面
+   * 
+   * 开始监听用户输入，直到用户输入 /exit 或 /quit
    */
   async start(): Promise<void> {
     this.running = true;
+
+    // 注册到生命周期管理器
+    globalLifecycle.register('cli', this);
 
     // 创建 readline 接口
     this.rl = readline.createInterface({
@@ -31,7 +63,6 @@ export class CliChannel {
     });
 
     console.log('Miniclaw CLI 已启动，输入 /help 查看帮助\n');
-
     this.rl.prompt();
 
     return new Promise((resolve) => {
@@ -43,25 +74,12 @@ export class CliChannel {
           return;
         }
 
-        const response = await this.processInput(trimmed);
-        
-        if (response === '__EXIT__') {
-          this.rl!.close();
-          this.running = false;
-          resolve();
-          return;
-        }
-
-        if (response) {
-          console.log(response);
-          console.log('');
-        }
-
+        await this.processInput(trimmed);
         this.rl!.prompt();
       });
 
       this.rl!.on('close', () => {
-        console.log('\n再见！');
+        this.running = false;
         resolve();
       });
     });
@@ -69,73 +87,57 @@ export class CliChannel {
 
   /**
    * 处理用户输入
+   * 
+   * @param input - 用户输入的文本
    */
-  async processInput(input: string): Promise<string> {
-    // 处理命令
-    if (input.startsWith('/')) {
-      return this.handleCommand(input);
+  async processInput(input: string): Promise<void> {
+    // 先检查是否是命令
+    const isCommand = await handleCliCommand(input, this.agent);
+    
+    if (isCommand) {
+      return;
     }
 
-    // 普通对话
-    const response = await this.agent.chat(input);
-    return response.content;
-  }
-
-  /**
-   * 处理命令
-   */
-  private handleCommand(command: string): string {
-    const cmd = command.toLowerCase();
-
-    switch (cmd) {
-      case '/exit':
-      case '/quit':
-      case '/q':
-        return '__EXIT__';
-
-      case '/reset':
-        this.agent.reset();
-        return '对话已重置';
-
-      case '/help':
-      case '/h':
-        return this.getHelpText();
-
-      case '/history':
-        const history = this.agent.getHistory();
-        if (history.length === 0) {
-          return '暂无对话历史';
-        }
-        return history.map((msg: any, i: number) => `[${i}] ${msg.role}: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content).slice(0, 100)}`).join('\n');
-
-      default:
-        return `未知命令: ${command}\n输入 /help 查看帮助`;
+    // 普通对话 - 流式输出
+    process.stdout.write('\n');
+    
+    const generator = this.agent.streamChat(input);
+    
+    for await (const chunk of generator) {
+      if (chunk.content) {
+        process.stdout.write(chunk.content);
+      }
+      if (chunk.done) {
+        break;
+      }
     }
-  }
-
-  /**
-   * 获取帮助文本
-   */
-  private getHelpText(): string {
-    return `
-Miniclaw 命令帮助:
-
-  /help, /h     显示帮助
-  /exit, /q     退出程序
-  /reset        重置对话
-  /history      查看对话历史
-
-其他输入将作为对话内容发送给 AI。
-`.trim();
+    
+    process.stdout.write('\n\n');
   }
 
   /**
    * 停止 CLI
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.rl) {
       this.rl.close();
+      this.rl = null;
     }
     this.running = false;
   }
+
+  /**
+   * 检查是否运行中
+   */
+  isRunning(): boolean {
+    return this.running;
+  }
+}
+
+/**
+ * 通道接口
+ */
+interface Channel {
+  stop: () => Promise<void>;
+  isRunning?: () => boolean;
 }

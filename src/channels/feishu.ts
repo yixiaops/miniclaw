@@ -29,7 +29,6 @@ export interface FeishuReply {
  */
 export class FeishuChannel {
   private agent: MiniclawAgent;
-  private config: Config;
   private running = false;
 
   constructor(agent: MiniclawAgent, config: Config) {
@@ -38,7 +37,6 @@ export class FeishuChannel {
     }
 
     this.agent = agent;
-    this.config = config;
   }
 
   /**

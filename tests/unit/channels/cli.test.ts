@@ -1,14 +1,11 @@
 /**
  * CLI 通道测试
- * TDD: Red 阶段 - 先写失败的测试
+ * TDD: 测试 CLI 通道的功能
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CliChannel } from '../../../src/channels/cli';
-import { MiniclawAgent } from '../../../src/core/agent';
+import type { MiniclawAgent } from '../../../src/core/agent';
 import type { Config } from '../../../src/core/config';
-
-// Mock MiniclawAgent
-vi.mock('../../../src/core/agent');
 
 describe('CliChannel', () => {
   let mockConfig: Config;
@@ -27,13 +24,26 @@ describe('CliChannel', () => {
       }
     };
 
+    // 创建模拟的 streamChat 生成器
+    const mockGenerator = (async function* () {
+      yield { content: 'Test ', done: false };
+      yield { content: 'response', done: false };
+      yield { done: true };
+    })();
+
     mockAgent = {
       chat: vi.fn().mockResolvedValue({ content: 'Test response' }),
-      streamChat: vi.fn(),
+      streamChat: vi.fn().mockReturnValue(mockGenerator),
       getHistory: vi.fn().mockReturnValue([]),
       reset: vi.fn(),
       registerTool: vi.fn(),
-      getTools: vi.fn().mockReturnValue([])
+      getTools: vi.fn().mockReturnValue([]),
+      getModelConfig: vi.fn().mockReturnValue({
+        provider: 'bailian',
+        model: 'qwen-plus',
+        baseUrl: 'https://api.example.com'
+      }),
+      setModel: vi.fn()
     } as any;
   });
 
@@ -58,22 +68,31 @@ describe('CliChannel', () => {
   });
 
   describe('processInput', () => {
-    it('should process user input and return response', async () => {
+    it('should process user input via streamChat', async () => {
       const cli = new CliChannel(mockAgent);
       
-      const response = await cli.processInput('Hello');
+      // 捕获 stdout
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
       
-      expect(mockAgent.chat).toHaveBeenCalledWith('Hello');
-      expect(response).toBe('Test response');
+      await cli.processInput('Hello');
+      
+      expect(mockAgent.streamChat).toHaveBeenCalledWith('Hello');
+      
+      stdoutSpy.mockRestore();
     });
 
     it('should handle exit command', async () => {
       const cli = new CliChannel(mockAgent);
       
-      const result = await cli.processInput('/exit');
+      // 模拟 process.exit
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
       
-      // exit 返回特殊标识
-      expect(result).toBe('__EXIT__');
+      await cli.processInput('/exit');
+      
+      // exit 命令会调用 process.exit(0)
+      expect(exitSpy).toHaveBeenCalledWith(0);
+      
+      exitSpy.mockRestore();
     });
 
     it('should handle reset command', async () => {
@@ -87,9 +106,24 @@ describe('CliChannel', () => {
     it('should handle help command', async () => {
       const cli = new CliChannel(mockAgent);
       
-      const result = await cli.processInput('/help');
+      // 捕获 console.log
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       
-      expect(result).toContain('命令');
+      await cli.processInput('/help');
+      
+      expect(logSpy).toHaveBeenCalled();
+      
+      logSpy.mockRestore();
+    });
+  });
+
+  describe('stop', () => {
+    it('should stop CLI', async () => {
+      const cli = new CliChannel(mockAgent);
+      
+      await cli.stop();
+      
+      expect(cli.isRunning()).toBe(false);
     });
   });
 });

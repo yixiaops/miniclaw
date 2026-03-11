@@ -41,7 +41,7 @@ export class WebChannel {
    */
   private setupRoutes(): void {
     // 主页
-    this.app.get('/', (req: Request, res: Response) => {
+    this.app.get('/', (_req: Request, res: Response) => {
       res.send(this.getHtmlPage());
     });
 
@@ -51,7 +51,8 @@ export class WebChannel {
         const { message } = req.body;
         
         if (!message) {
-          return res.status(400).json({ error: 'message is required' });
+          res.status(400).json({ error: 'message is required' });
+          return;
         }
 
         const response = await this.agent.chat(message);

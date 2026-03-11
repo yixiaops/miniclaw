@@ -32,13 +32,10 @@ export class ApiChannel {
     this.app.use(express.urlencoded({ extended: true }));
 
     // CORS
-    this.app.use((req: Request, res: Response, next: NextFunction) => {
+    this.app.use((_req: Request, res: Response, next: NextFunction) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-      }
       next();
     });
   }
@@ -48,7 +45,7 @@ export class ApiChannel {
    */
   private setupRoutes(): void {
     // 健康检查
-    this.app.get('/health', (req: Request, res: Response) => {
+    this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
@@ -58,7 +55,8 @@ export class ApiChannel {
         const { message } = req.body;
         
         if (!message) {
-          return res.status(400).json({ error: 'message is required' });
+          res.status(400).json({ error: 'message is required' });
+          return;
         }
 
         const response = await this.agent.chat(message);
@@ -80,13 +78,15 @@ export class ApiChannel {
         const { messages, stream } = req.body;
         
         if (!messages || !Array.isArray(messages)) {
-          return res.status(400).json({ error: 'messages is required' });
+          res.status(400).json({ error: 'messages is required' });
+          return;
         }
 
         // 获取最后一条用户消息
         const lastMessage = messages.filter((m: any) => m.role === 'user').pop();
         if (!lastMessage) {
-          return res.status(400).json({ error: 'No user message found' });
+          res.status(400).json({ error: 'No user message found' });
+          return;
         }
 
         const content = typeof lastMessage.content === 'string' 
