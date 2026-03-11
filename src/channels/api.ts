@@ -3,8 +3,8 @@
  * HTTP REST API 接口
  */
 import express, { Request, Response, NextFunction } from 'express';
-import type { MiniclawAgent } from '../core/agent';
-import type { Config } from '../core/config';
+import type { MiniclawAgent } from '../core/agent/index.js';
+import type { Config } from '../core/config.js';
 
 /**
  * API 通道类

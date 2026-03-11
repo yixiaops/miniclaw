@@ -3,12 +3,12 @@
  * 轻量级个人 AI 助手
  */
 import 'dotenv/config';
-import { MiniclawAgent } from './core/agent';
-import { loadConfig } from './core/config';
-import { CliChannel } from './channels/cli';
-import { ApiChannel } from './channels/api';
-import { FeishuChannel } from './channels/feishu';
-import { getBuiltinTools } from './tools';
+import { MiniclawAgent } from './core/agent/index.js';
+import { loadConfig } from './core/config.js';
+import { CliChannel } from './channels/cli.js';
+import { ApiChannel } from './channels/api.js';
+import { FeishuChannel } from './channels/feishu.js';
+import { getBuiltinTools } from './tools/index.js';
 
 /**
  * 主函数
@@ -26,7 +26,7 @@ async function main() {
 
   // 注册内置工具
   const tools = getBuiltinTools();
-  tools.forEach(tool => agent.registerTool(tool as any));
+  tools.forEach((tool: any) => agent.registerTool(tool as any));
   console.log(`已加载 ${tools.length} 个工具`);
 
   // 解析命令行参数
@@ -92,7 +92,7 @@ async function main() {
 
     case 'web':
       // WebChat 模式
-      const { WebChannel } = await import('./channels/web');
+      const { WebChannel } = await import('./channels/web.js');
       const webChannel = new WebChannel(agent, config);
       await webChannel.start();
       

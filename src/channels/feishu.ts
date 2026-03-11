@@ -2,8 +2,8 @@
  * 飞书通道
  * 飞书机器人消息处理
  */
-import type { MiniclawAgent } from '../core/agent';
-import type { Config } from '../core/config';
+import type { MiniclawAgent } from '../core/agent/index.js';
+import type { Config } from '../core/config.js';
 
 /**
  * 飞书消息类型

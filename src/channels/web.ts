@@ -6,8 +6,8 @@ import express, { Request, Response } from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
-import type { MiniclawAgent } from '../core/agent';
-import type { Config } from '../core/config';
+import type { MiniclawAgent } from '../core/agent/index.js';
+import type { Config } from '../core/config.js';
 
 /**
  * WebChat 通道类

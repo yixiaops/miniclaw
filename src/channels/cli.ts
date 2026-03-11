@@ -3,7 +3,7 @@
  * 命令行交互界面
  */
 import * as readline from 'readline';
-import type { MiniclawAgent } from '../core/agent';
+import type { MiniclawAgent } from '../core/agent/index.js';
 
 /**
  * CLI 通道类
@@ -106,7 +106,7 @@ export class CliChannel {
         if (history.length === 0) {
           return '暂无对话历史';
         }
-        return history.map((msg, i) => `[${i}] ${msg.role}: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content).slice(0, 100)}`).join('\n');
+        return history.map((msg: any, i: number) => `[${i}] ${msg.role}: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content).slice(0, 100)}`).join('\n');
 
       default:
         return `未知命令: ${command}\n输入 /help 查看帮助`;

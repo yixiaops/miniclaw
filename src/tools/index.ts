@@ -2,10 +2,10 @@
  * Tools 模块入口
  * 导出所有内置工具
  */
-import { readFileTool } from './read-file';
-import { writeFileTool } from './write-file';
-import { shellTool } from './shell';
-import { webFetchTool } from './web-fetch';
+import { readFileTool } from './read-file.js';
+import { writeFileTool } from './write-file.js';
+import { shellTool } from './shell.js';
+import { webFetchTool } from './web-fetch.js';
 
 export { readFileTool, writeFileTool, shellTool, webFetchTool };
 
