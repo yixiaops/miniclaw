@@ -4,25 +4,23 @@
  */
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { Type, type Static } from '@sinclair/typebox';
 
 /**
- * 工具参数类型
+ * 工具参数 schema
  */
-export interface WriteFileParams {
-  /** 文件路径 */
+const WriteFileParamsSchema = Type.Object({
+  path: Type.String({ description: '要写入的文件路径' }),
+  content: Type.String({ description: '要写入的内容' })
+});
+
+type WriteFileParams = Static<typeof WriteFileParamsSchema>;
+
+/**
+ * 工具详情类型
+ */
+export interface WriteFileDetails {
   path: string;
-  /** 文件内容 */
-  content: string;
-}
-
-/**
- * 工具返回类型
- */
-export interface WriteFileResult {
-  /** 是否成功 */
-  success: boolean;
-  /** 错误信息（失败时） */
-  error?: string;
 }
 
 /**
@@ -30,43 +28,37 @@ export interface WriteFileResult {
  */
 export const writeFileTool = {
   name: 'write_file',
+  label: '写入文件',
   description: '将内容写入指定路径的文件',
-  parameters: {
-    type: 'object',
-    properties: {
-      path: {
-        type: 'string',
-        description: '要写入的文件路径'
-      },
-      content: {
-        type: 'string',
-        description: '要写入的内容'
-      }
-    },
-    required: ['path', 'content']
-  },
+  parameters: WriteFileParamsSchema,
 
   /**
    * 执行文件写入
    */
-  async execute(params: WriteFileParams): Promise<WriteFileResult> {
+  async execute(
+    _toolCallId: string,
+    params: WriteFileParams,
+    _signal?: AbortSignal
+  ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: WriteFileDetails }> {
     const { path, content } = params;
 
     try {
       // 确保目录存在
       const dir = dirname(path);
       mkdirSync(dir, { recursive: true });
-      
+
       // 写入文件
       writeFileSync(path, content, 'utf-8');
-      
+
       return {
-        success: true
+        content: [{ type: 'text', text: `文件已成功写入: ${path}` }],
+        details: { path }
       };
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       return {
-        success: false,
-        error: `写入文件失败: ${err instanceof Error ? err.message : String(err)}`
+        content: [{ type: 'text', text: `写入文件失败: ${errorMsg}` }],
+        details: { path }
       };
     }
   }

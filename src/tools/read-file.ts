@@ -3,25 +3,22 @@
  * 读取指定路径的文件内容
  */
 import { readFileSync, existsSync } from 'fs';
+import { Type, type Static } from '@sinclair/typebox';
 
 /**
- * 工具参数类型
+ * 工具参数 schema
  */
-export interface ReadFileParams {
-  /** 文件路径 */
+const ReadFileParamsSchema = Type.Object({
+  path: Type.String({ description: '要读取的文件路径' })
+});
+
+type ReadFileParams = Static<typeof ReadFileParamsSchema>;
+
+/**
+ * 工具详情类型
+ */
+export interface ReadFileDetails {
   path: string;
-}
-
-/**
- * 工具返回类型
- */
-export interface ReadFileResult {
-  /** 是否成功 */
-  success: boolean;
-  /** 文件内容（成功时） */
-  content?: string;
-  /** 错误信息（失败时） */
-  error?: string;
 }
 
 /**
@@ -29,43 +26,40 @@ export interface ReadFileResult {
  */
 export const readFileTool = {
   name: 'read_file',
+  label: '读取文件',
   description: '读取指定路径的文件内容',
-  parameters: {
-    type: 'object',
-    properties: {
-      path: {
-        type: 'string',
-        description: '要读取的文件路径'
-      }
-    },
-    required: ['path']
-  },
+  parameters: ReadFileParamsSchema,
 
   /**
    * 执行文件读取
    */
-  async execute(params: ReadFileParams): Promise<ReadFileResult> {
+  async execute(
+    _toolCallId: string,
+    params: ReadFileParams,
+    _signal?: AbortSignal
+  ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: ReadFileDetails }> {
     const { path } = params;
 
     // 检查文件是否存在
     if (!existsSync(path)) {
       return {
-        success: false,
-        error: `文件不存在: ${path}`
+        content: [{ type: 'text', text: `文件不存在: ${path}` }],
+        details: { path }
       };
     }
 
     try {
       // 读取文件内容
-      const content = readFileSync(path, 'utf-8');
+      const fileContent = readFileSync(path, 'utf-8');
       return {
-        success: true,
-        content
+        content: [{ type: 'text', text: fileContent }],
+        details: { path }
       };
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       return {
-        success: false,
-        error: `读取文件失败: ${err instanceof Error ? err.message : String(err)}`
+        content: [{ type: 'text', text: `读取文件失败: ${errorMsg}` }],
+        details: { path }
       };
     }
   }

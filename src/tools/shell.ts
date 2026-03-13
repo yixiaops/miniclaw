@@ -3,29 +3,22 @@
  * 执行 Shell 命令并返回结果
  */
 import { execSync } from 'child_process';
+import { Type, type Static } from '@sinclair/typebox';
 
 /**
- * 工具参数类型
+ * 工具参数 schema
  */
-export interface ShellParams {
-  /** 要执行的命令 */
-  command: string;
-}
+const ShellParamsSchema = Type.Object({
+  command: Type.String({ description: '要执行的 Shell 命令' })
+});
+
+type ShellParams = Static<typeof ShellParamsSchema>;
 
 /**
- * 工具返回类型
+ * 工具详情类型
  */
-export interface ShellResult {
-  /** 是否成功（exit code 为 0） */
-  success: boolean;
-  /** 标准输出 */
-  stdout: string;
-  /** 标准错误 */
-  stderr: string;
-  /** 退出码 */
+export interface ShellDetails {
   exitCode: number;
-  /** 错误信息（执行失败时） */
-  error?: string;
 }
 
 /**
@@ -33,22 +26,18 @@ export interface ShellResult {
  */
 export const shellTool = {
   name: 'shell',
+  label: '执行命令',
   description: '执行 Shell 命令',
-  parameters: {
-    type: 'object',
-    properties: {
-      command: {
-        type: 'string',
-        description: '要执行的 Shell 命令'
-      }
-    },
-    required: ['command']
-  },
+  parameters: ShellParamsSchema,
 
   /**
    * 执行 Shell 命令
    */
-  async execute(params: ShellParams): Promise<ShellResult> {
+  async execute(
+    _toolCallId: string,
+    params: ShellParams,
+    _signal?: AbortSignal
+  ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: ShellDetails }> {
     const { command } = params;
 
     try {
@@ -61,10 +50,8 @@ export const shellTool = {
       });
 
       return {
-        success: true,
-        stdout: stdout || '',
-        stderr: '',
-        exitCode: 0
+        content: [{ type: 'text', text: stdout || '(命令执行成功，无输出)' }],
+        details: { exitCode: 0 }
       };
     } catch (err: any) {
       // 命令执行失败
@@ -72,12 +59,11 @@ export const shellTool = {
       const stderr = err.stderr?.toString() || '';
       const exitCode = err.status ?? 1;
 
+      const output = stdout + (stderr ? `\n错误: ${stderr}` : '');
+
       return {
-        success: exitCode === 0,
-        stdout,
-        stderr,
-        exitCode,
-        error: err.message
+        content: [{ type: 'text', text: output || `命令执行失败 (exit code: ${exitCode})` }],
+        details: { exitCode }
       };
     }
   }
