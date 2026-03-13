@@ -104,9 +104,20 @@ export class CliChannel implements Channel {
     const generator = this.agent.streamChat(input);
     
     for await (const chunk of generator) {
+      // 显示工具执行状态
+      if (chunk.toolName && chunk.toolStatus) {
+        if (chunk.toolStatus === 'start') {
+          process.stdout.write(`\n🔧 执行工具: ${chunk.toolName}...\n`);
+        } else if (chunk.toolStatus === 'end') {
+          // 工具执行完成，可以在这里显示结果摘要
+        }
+      }
+      
+      // 显示文本内容
       if (chunk.content) {
         process.stdout.write(chunk.content);
       }
+      
       if (chunk.done) {
         break;
       }

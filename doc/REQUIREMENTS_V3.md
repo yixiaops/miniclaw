@@ -410,31 +410,61 @@ describe('MiniclawGateway', () => {
 
 ## 六、实施计划
 
+### 6.0 当前进度 (2026-03-13)
+
+**测试状态：** ✅ 121 tests passed
+
+**已完成组件：**
+
+| 组件 | 状态 | 测试覆盖率 | 文件 |
+|------|------|-----------|------|
+| Router | ✅ 完成 | 82% | `src/core/gateway/router.ts` |
+| SessionManager | ✅ 完成 | 94% | `src/core/gateway/session.ts` |
+| Agent | ✅ 完成 | 72% | `src/core/agent/index.ts` |
+| Config | ✅ 完成 | 87% | `src/core/config.ts` |
+| Lifecycle | ✅ 完成 | 89% | `src/core/lifecycle.ts` |
+| CLI Channel | ✅ 完成 | 49% | `src/channels/cli.ts` |
+| API Channel | ✅ 完成 | 41% | `src/channels/api.ts` |
+| Web Channel | ✅ 完成 | 60% | `src/channels/web.ts` |
+| Feishu Channel | ✅ 完成 | 56% | `src/channels/feishu.ts` |
+
+**待完成组件：**
+
+| 组件 | 优先级 | 工时 | 说明 |
+|------|--------|------|------|
+| Gateway 主类 | P0 | 2h | 统一入口，整合 Router + SessionManager + AgentPool |
+| AgentPool | P0 | 1h | Agent 实例管理、复用、资源限制 |
+| 存储层 (memory/sqlite) | P1 | 3h | Session 持久化支持 |
+| Gateway 集成测试 | P1 | 1h | 端到端流程测试 |
+| 验收标准测试 | P1 | 1h | CLI/API/Feishu 隔离验证 |
+
+---
+
 ### 6.1 阶段一：核心组件
 
-| 任务 | 工时 | 优先级 |
-|------|------|--------|
-| SessionManager 实现 | 2h | P0 |
-| SessionManager 测试 | 1h | P0 |
-| Router 实现 | 2h | P0 |
-| Router 测试 | 1h | P0 |
+| 任务 | 工时 | 优先级 | 状态 |
+|------|------|--------|------|
+| SessionManager 实现 | 2h | P0 | ✅ 已完成 |
+| SessionManager 测试 | 1h | P0 | ✅ 已完成 |
+| Router 实现 | 2h | P0 | ✅ 已完成 |
+| Router 测试 | 1h | P0 | ✅ 已完成 |
 
 ### 6.2 阶段二：集成
 
-| 任务 | 工时 | 优先级 |
-|------|------|--------|
-| AgentPool 实现 | 1h | P0 |
-| Gateway 主类实现 | 2h | P0 |
-| Gateway 测试 | 1h | P0 |
-| 集成测试 | 1h | P1 |
+| 任务 | 工时 | 优先级 | 状态 |
+|------|------|--------|------|
+| AgentPool 实现 | 1h | P0 | ⏳ 待开发 |
+| Gateway 主类实现 | 2h | P0 | ⏳ 待开发 |
+| Gateway 测试 | 1h | P0 | ⏳ 待开发 |
+| 集成测试 | 1h | P1 | ⏳ 待开发 |
 
 ### 6.3 阶段三：持久化
 
-| 任务 | 工时 | 优先级 |
-|------|------|--------|
-| 内存存储实现 | 1h | P1 |
-| SQLite 存储实现 | 2h | P2 |
-| 文件存储实现 | 1h | P2 |
+| 任务 | 工时 | 优先级 | 状态 |
+|------|------|--------|------|
+| 内存存储实现 | 1h | P1 | ⏳ 待开发 |
+| SQLite 存储实现 | 2h | P2 | ⏳ 待开发 |
+| 文件存储实现 | 1h | P2 | ⏳ 待开发 |
 
 ---
 
@@ -451,10 +481,10 @@ describe('MiniclawGateway', () => {
 
 ### 7.2 测试验收
 
-- [ ] Router 测试覆盖率 ≥ 80%
-- [ ] SessionManager 测试覆盖率 ≥ 80%
-- [ ] Gateway 测试覆盖率 ≥ 70%
-- [ ] 所有测试通过
+- [x] Router 测试覆盖率 ≥ 80% ✅ **82%**
+- [x] SessionManager 测试覆盖率 ≥ 80% ✅ **94%**
+- [ ] Gateway 测试覆盖率 ≥ 70% ⏳ 待开发
+- [x] 所有测试通过 ✅ **121 tests passed**
 
 ### 7.3 性能验收
 
@@ -479,6 +509,7 @@ describe('MiniclawGateway', () => {
 | 日期 | 版本 | 变更内容 |
 |------|------|----------|
 | 2026-03-11 | v0.3.0 | 三期需求文档初稿：网关架构设计 |
+| 2026-03-13 | v0.3.1 | 更新实施进度：Router/SessionManager 已完成，121 测试通过 |
 
 ---
 

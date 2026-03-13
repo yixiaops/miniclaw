@@ -176,22 +176,120 @@ export class MiniclawAgent {
 
   /**
    * 流式发送消息
+   * 支持工具调用事件的实时输出
    */
-  async *streamChat(input: string): AsyncGenerator<{ content?: string; done: boolean }> {
-    // 收集流式响应
-    let fullContent = '';
+  async *streamChat(input: string): AsyncGenerator<{
+    content?: string;
+    toolName?: string;
+    toolStatus?: 'start' | 'end';
+    toolResult?: any;
+    done: boolean;
+  }> {
+    // 事件队列，用于实现真正的流式输出
+    const eventQueue: Array<{
+      content?: string;
+      toolName?: string;
+      toolStatus?: 'start' | 'end';
+      toolResult?: any;
+      done: boolean;
+    }> = [];
 
+    // 用于通知新事件可用
+    let resolveEvent: (() => void) | null = null;
+    let isComplete = false;
+
+    // 订阅所有 Agent 事件
     const unsubscribe = this.agent.subscribe((event: any) => {
-      if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
-        fullContent += event.assistantMessageEvent.delta;
+      switch (event.type) {
+        // 文本增量更新
+        case 'message_update':
+          if (event.assistantMessageEvent?.type === 'text_delta') {
+            eventQueue.push({
+              content: event.assistantMessageEvent.delta,
+              done: false
+            });
+          }
+          break;
+
+        // 工具执行开始
+        case 'tool_execution_start':
+          eventQueue.push({
+            toolName: event.toolName,
+            toolStatus: 'start',
+            done: false
+          });
+          break;
+
+        // 工具执行结束
+        case 'tool_execution_end':
+          eventQueue.push({
+            toolName: event.toolName,
+            toolStatus: 'end',
+            toolResult: event.result,
+            done: false
+          });
+          break;
+
+        // Agent 结束
+        case 'agent_end':
+          isComplete = true;
+          eventQueue.push({ done: true });
+          break;
+      }
+
+      // 通知有新事件
+      if (resolveEvent) {
+        resolveEvent();
+        resolveEvent = null;
       }
     });
 
-    await this.agent.prompt(input);
+    // 启动 prompt
+    this.agent.prompt(input).then(() => {
+      // prompt 完成后，如果没有收到 agent_end 事件，手动标记完成
+      // 这是为了兼容可能不发送 agent_end 事件的实现
+      if (!isComplete) {
+        isComplete = true;
+        eventQueue.push({ done: true });
+        if (resolveEvent) {
+          resolveEvent();
+          resolveEvent = null;
+        }
+      }
+    }).catch((error) => {
+      eventQueue.push({ content: `Error: ${error.message}`, done: false });
+      isComplete = true;
+      eventQueue.push({ done: true });
+      if (resolveEvent) {
+        resolveEvent();
+        resolveEvent = null;
+      }
+    });
 
-    // 返回收集的内容
-    yield { content: fullContent, done: false };
-    yield { done: true };
+    // 流式输出事件
+    while (true) {
+      // 如果队列中有事件，立即 yield
+      if (eventQueue.length > 0) {
+        const event = eventQueue.shift()!;
+        yield event;
+
+        // 如果是完成事件，结束循环
+        if (event.done) {
+          break;
+        }
+        continue;
+      }
+
+      // 如果已完成且队列空，结束
+      if (isComplete) {
+        break;
+      }
+
+      // 等待新事件
+      await new Promise<void>((resolve) => {
+        resolveEvent = resolve;
+      });
+    }
 
     unsubscribe();
   }
