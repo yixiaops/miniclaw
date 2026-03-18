@@ -7,8 +7,9 @@
  */
 
 import { Router, type RouteContext } from './router.js';
-import { SessionManager, type SessionConfig } from './session.js';
+import { SessionManager, type SessionConfig, type Session } from './session.js';
 import { AgentRegistry, type CreateAgentFn } from '../agent/registry.js';
+import { SimpleMemoryStorage, type Message as StorageMessage } from '../memory/simple.js';
 import type { Config } from '../config.js';
 import type { MiniclawAgent, StreamChatEvent } from '../agent/index.js';
 
@@ -58,6 +59,8 @@ export interface GatewayConfig {
   maxAgents?: number;
   /** Session 配置 */
   sessionConfig?: Partial<SessionConfig>;
+  /** 存储目录路径（可选，默认 ~/.miniclaw/sessions/） */
+  storageDir?: string;
 }
 
 /**
@@ -106,6 +109,9 @@ export class MiniclawGateway {
   /** Agent 注册表 */
   private agentRegistry: AgentRegistry;
 
+  /** 持久化存储 */
+  private storage: SimpleMemoryStorage;
+
   /** 配置 */
   private config: Config;
 
@@ -137,6 +143,39 @@ export class MiniclawGateway {
       gatewayConfig.createAgentFn,
       gatewayConfig.maxAgents
     );
+
+    // 初始化持久化存储
+    this.storage = new SimpleMemoryStorage(gatewayConfig.storageDir);
+  }
+
+  /**
+   * 初始化 Gateway
+   *
+   * 从持久化存储加载已有的 Session 历史。
+   * 必须在使用 Gateway 之前调用此方法。
+   */
+  async initialize(): Promise<void> {
+    const sessionKeys = await this.storage.listSessions();
+
+    for (const sessionKey of sessionKeys) {
+      const messages = await this.storage.load(sessionKey);
+      if (messages.length > 0) {
+        // 创建 Session 并恢复历史消息
+        const session = this.sessionManager.getOrCreate(sessionKey, {
+          channel: 'restored'
+        });
+        // 恢复历史消息
+        for (const msg of messages) {
+          session.addMessage({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined
+          });
+        }
+      }
+    }
+
+    console.log(`[Gateway] 从记忆加载了 ${sessionKeys.length} 个 Session`);
   }
 
   /**
@@ -172,7 +211,10 @@ export class MiniclawGateway {
       content: response.content
     });
 
-    // 6. 返回响应
+    // 6. 保存对话历史到持久化存储
+    await this.saveSessionHistory(session);
+
+    // 7. 返回响应
     return {
       content: response.content,
       sessionId
@@ -223,6 +265,9 @@ export class MiniclawGateway {
       role: 'assistant',
       content: fullContent
     });
+
+    // 7. 保存对话历史到持久化存储
+    await this.saveSessionHistory(session);
   }
 
   /**
@@ -329,5 +374,21 @@ export class MiniclawGateway {
       clientId: ctx.clientId,
       content: ctx.content
     };
+  }
+
+  /**
+   * 保存 Session 的对话历史到持久化存储
+   *
+   * @param session - Session 实例
+   */
+  private async saveSessionHistory(session: Session): Promise<void> {
+    const messages: StorageMessage[] = session.messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp?.toISOString()
+    }));
+
+    await this.storage.save(session.id, messages);
+    console.log(`[Gateway] 保存对话历史到: ${session.id}`);
   }
 }

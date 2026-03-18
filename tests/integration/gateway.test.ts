@@ -330,4 +330,107 @@ describe('Gateway Integration', () => {
       expect(statusAfter.sessionCount).toBe(0);
     });
   });
+
+  describe('记忆持久化与恢复', () => {
+    it('应该保存对话历史到持久化存储', async () => {
+      // 创建带存储目录的 Gateway
+      const createAgentFn = () => createMockAgent();
+      const persistGateway = new MiniclawGateway(mockConfig, {
+        createAgentFn,
+        storageDir: tempDir
+      });
+
+      // 发送消息
+      await persistGateway.handleMessage({
+        channel: 'cli',
+        content: '测试消息'
+      });
+
+      // 检查存储中是否有数据
+      const sessions = await storage.listSessions();
+      expect(sessions.length).toBeGreaterThan(0);
+
+      // 加载消息
+      const messages = await storage.load('session-cli');
+      expect(messages.length).toBe(2); // user + assistant
+      expect(messages[0].role).toBe('user');
+      expect(messages[0].content).toBe('测试消息');
+
+      persistGateway.cleanup();
+    });
+
+    it('应该能够从持久化存储恢复对话历史', async () => {
+      // 第一步：创建 Gateway 并发送消息
+      const createAgentFn1 = () => createMockAgent();
+      const gateway1 = new MiniclawGateway(mockConfig, {
+        createAgentFn: createAgentFn1,
+        storageDir: tempDir
+      });
+
+      await gateway1.handleMessage({
+        channel: 'cli',
+        content: '第一条消息'
+      });
+      await gateway1.handleMessage({
+        channel: 'cli',
+        content: '第二条消息'
+      });
+
+      gateway1.cleanup();
+
+      // 第二步：创建新的 Gateway 实例（模拟重启）
+      const createAgentFn2 = () => createMockAgent();
+      const gateway2 = new MiniclawGateway(mockConfig, {
+        createAgentFn: createAgentFn2,
+        storageDir: tempDir
+      });
+
+      // 初始化以加载历史
+      await gateway2.initialize();
+
+      // 验证 Session 已恢复
+      const sessionManager = gateway2.getSessionManager();
+      const session = sessionManager.get('session-cli');
+
+      expect(session).toBeDefined();
+      expect(session!.messages.length).toBe(4); // 2 user + 2 assistant
+      expect(session!.messages[0].content).toBe('第一条消息');
+      expect(session!.messages[2].content).toBe('第二条消息');
+
+      gateway2.cleanup();
+    });
+
+    it('初始化时应该输出加载的 Session 数量', async () => {
+      // 先保存一些数据
+      await storage.save('session-test-1', [
+        { role: 'user', content: '测试1' },
+        { role: 'assistant', content: '响应1' }
+      ]);
+      await storage.save('session-test-2', [
+        { role: 'user', content: '测试2' },
+        { role: 'assistant', content: '响应2' }
+      ]);
+
+      // 创建新的 Gateway 并初始化
+      const createAgentFn = () => createMockAgent();
+      const newGateway = new MiniclawGateway(mockConfig, {
+        createAgentFn,
+        storageDir: tempDir
+      });
+
+      // 捕获 console.log 输出
+      const logs: string[] = [];
+      const originalLog = console.log;
+      console.log = (msg: string) => logs.push(msg);
+
+      await newGateway.initialize();
+
+      console.log = originalLog;
+
+      // 验证日志输出
+      expect(logs.some(log => log.includes('从记忆加载了') && log.includes('Session'))).toBe(true);
+
+      newGateway.cleanup();
+    });
+  });
 });
