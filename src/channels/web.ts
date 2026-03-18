@@ -6,23 +6,20 @@ import express, { Request, Response } from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
-import type { MiniclawAgent } from '../core/agent/index.js';
-import type { Config } from '../core/config.js';
+import type { MiniclawGateway } from '../core/gateway/index.js';
 
 /**
  * WebChat 通道类
  */
 export class WebChannel {
-  private agent: MiniclawAgent;
-  private config: Config;
+  private gateway: MiniclawGateway;
   private app: express.Application;
   private server: any;
   private io: SocketIOServer | null = null;
   private running = false;
 
-  constructor(agent: MiniclawAgent, config: Config) {
-    this.agent = agent;
-    this.config = config;
+  constructor(gateway: MiniclawGateway) {
+    this.gateway = gateway;
     this.app = express();
     this.setupMiddleware();
     this.setupRoutes();
@@ -48,19 +45,23 @@ export class WebChannel {
     // API: 发送消息
     this.app.post('/api/chat', async (req: Request, res: Response) => {
       try {
-        const { message } = req.body;
-        
+        const { message, clientId } = req.body;
+
         if (!message) {
           res.status(400).json({ error: 'message is required' });
           return;
         }
 
-        const response = await this.agent.chat(message);
-        res.json({ success: true, content: response.content });
+        const response = await this.gateway.handleMessage({
+          channel: 'web',
+          clientId: clientId || 'default',
+          content: message
+        });
+        res.json({ success: true, content: response.content, sessionId: response.sessionId });
       } catch (error) {
-        res.status(500).json({ 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     });
@@ -104,7 +105,7 @@ export class WebChannel {
   <script>
     const chat = document.getElementById('chat');
     const input = document.getElementById('input');
-    
+
     function addMessage(content, isUser) {
       const div = document.createElement('div');
       div.className = 'message ' + (isUser ? 'user' : 'assistant');
@@ -112,14 +113,14 @@ export class WebChannel {
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
-    
+
     async function sendMessage() {
       const message = input.value.trim();
       if (!message) return;
-      
+
       addMessage(message, true);
       input.value = '';
-      
+
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
@@ -132,7 +133,7 @@ export class WebChannel {
         addMessage('请求失败: ' + err.message, false);
       }
     }
-    
+
     input.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') sendMessage();
     });
@@ -152,9 +153,10 @@ export class WebChannel {
    * 启动服务器
    */
   async start(): Promise<void> {
+    const config = this.gateway.getConfig();
     return new Promise((resolve) => {
       this.server = createServer(this.app);
-      
+
       // 初始化 Socket.IO
       this.io = new SocketIOServer(this.server, {
         cors: { origin: '*' }
@@ -166,7 +168,11 @@ export class WebChannel {
 
         socket.on('chat', async (message: string) => {
           try {
-            const response = await this.agent.chat(message);
+            const response = await this.gateway.handleMessage({
+              channel: 'web',
+              clientId: socket.id,
+              content: message
+            });
             socket.emit('response', response.content);
           } catch (error) {
             socket.emit('error', error instanceof Error ? error.message : 'Unknown error');
@@ -179,11 +185,11 @@ export class WebChannel {
       });
 
       this.server.listen(
-        this.config.server.port,
-        this.config.server.host,
+        config.server.port,
+        config.server.host,
         () => {
           this.running = true;
-          console.log(`WebChat 已启动: http://${this.config.server.host}:${this.config.server.port}`);
+          console.log(`WebChat 已启动: http://${config.server.host}:${config.server.port}`);
           resolve();
         }
       );

@@ -3,22 +3,19 @@
  * HTTP REST API 接口
  */
 import express, { Request, Response, NextFunction } from 'express';
-import type { MiniclawAgent } from '../core/agent/index.js';
-import type { Config } from '../core/config.js';
+import type { MiniclawGateway } from '../core/gateway/index.js';
 
 /**
  * API 通道类
  */
 export class ApiChannel {
-  private agent: MiniclawAgent;
-  private config: Config;
+  private gateway: MiniclawGateway;
   private app: express.Application;
   private server: any = null;
   private running = false;
 
-  constructor(agent: MiniclawAgent, config: Config) {
-    this.agent = agent;
-    this.config = config;
+  constructor(gateway: MiniclawGateway) {
+    this.gateway = gateway;
     this.app = express();
     this.setupMiddleware();
     this.setupRoutes();
@@ -44,6 +41,8 @@ export class ApiChannel {
    * 设置路由
    */
   private setupRoutes(): void {
+    const config = this.gateway.getConfig();
+
     // 健康检查
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -52,22 +51,27 @@ export class ApiChannel {
     // 对话接口
     this.app.post('/chat', async (req: Request, res: Response) => {
       try {
-        const { message } = req.body;
-        
+        const { message, clientId } = req.body;
+
         if (!message) {
           res.status(400).json({ error: 'message is required' });
           return;
         }
 
-        const response = await this.agent.chat(message);
-        res.json({ 
-          success: true, 
-          content: response.content 
+        const response = await this.gateway.handleMessage({
+          channel: 'api',
+          clientId: clientId || 'default',
+          content: message
+        });
+        res.json({
+          success: true,
+          content: response.content,
+          sessionId: response.sessionId
         });
       } catch (error) {
-        res.status(500).json({ 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     });
@@ -75,8 +79,8 @@ export class ApiChannel {
     // OpenAI 兼容接口
     this.app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       try {
-        const { messages, stream } = req.body;
-        
+        const { messages, stream, user } = req.body;
+
         if (!messages || !Array.isArray(messages)) {
           res.status(400).json({ error: 'messages is required' });
           return;
@@ -89,8 +93,8 @@ export class ApiChannel {
           return;
         }
 
-        const content = typeof lastMessage.content === 'string' 
-          ? lastMessage.content 
+        const content = typeof lastMessage.content === 'string'
+          ? lastMessage.content
           : lastMessage.content[0]?.text || '';
 
         if (stream) {
@@ -99,18 +103,34 @@ export class ApiChannel {
           res.setHeader('Cache-Control', 'no-cache');
           res.setHeader('Connection', 'keep-alive');
 
-          const response = await this.agent.chat(content);
-          res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: response.content } }] })}\n\n`);
+          const generator = this.gateway.streamHandleMessage({
+            channel: 'api',
+            clientId: user || 'default',
+            content
+          });
+
+          for await (const chunk of generator) {
+            if (chunk.content) {
+              res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk.content } }] })}\n\n`);
+            }
+            if (chunk.done) {
+              break;
+            }
+          }
           res.write('data: [DONE]\n\n');
           res.end();
         } else {
           // 非流式响应
-          const response = await this.agent.chat(content);
+          const response = await this.gateway.handleMessage({
+            channel: 'api',
+            clientId: user || 'default',
+            content
+          });
           res.json({
             id: `chatcmpl-${Date.now()}`,
             object: 'chat.completion',
             created: Math.floor(Date.now() / 1000),
-            model: this.config.bailian.model,
+            model: config.bailian.model,
             choices: [{
               index: 0,
               message: {
@@ -122,10 +142,10 @@ export class ApiChannel {
           });
         }
       } catch (error) {
-        res.status(500).json({ 
-          error: { 
-            message: error instanceof Error ? error.message : 'Unknown error' 
-          } 
+        res.status(500).json({
+          error: {
+            message: error instanceof Error ? error.message : 'Unknown error'
+          }
         });
       }
     });
@@ -142,13 +162,14 @@ export class ApiChannel {
    * 启动服务器
    */
   async start(): Promise<void> {
+    const config = this.gateway.getConfig();
     return new Promise((resolve) => {
       this.server = this.app.listen(
-        this.config.server.port,
-        this.config.server.host,
+        config.server.port,
+        config.server.host,
         () => {
           this.running = true;
-          console.log(`API 服务器已启动: http://${this.config.server.host}:${this.config.server.port}`);
+          console.log(`API 服务器已启动: http://${config.server.host}:${config.server.port}`);
           resolve();
         }
       );

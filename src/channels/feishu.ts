@@ -2,8 +2,7 @@
  * 飞书通道
  * 飞书机器人消息处理
  */
-import type { MiniclawAgent } from '../core/agent/index.js';
-import type { Config } from '../core/config.js';
+import type { MiniclawGateway } from '../core/gateway/index.js';
 
 /**
  * 飞书消息类型
@@ -28,15 +27,16 @@ export interface FeishuReply {
  * 飞书通道类
  */
 export class FeishuChannel {
-  private agent: MiniclawAgent;
+  private gateway: MiniclawGateway;
   private running = false;
 
-  constructor(agent: MiniclawAgent, config: Config) {
+  constructor(gateway: MiniclawGateway) {
+    const config = gateway.getConfig();
     if (!config.feishu) {
       throw new Error('Feishu configuration is required');
     }
 
-    this.agent = agent;
+    this.gateway = gateway;
   }
 
   /**
@@ -74,8 +74,13 @@ export class FeishuChannel {
       };
     }
 
-    // 调用 Agent 处理
-    const response = await this.agent.chat(message.content);
+    // 调用 Gateway 处理
+    const response = await this.gateway.handleMessage({
+      channel: 'feishu',
+      userId: message.senderId,
+      groupId: message.chatId,
+      content: message.content
+    });
 
     return {
       msgType: 'text',

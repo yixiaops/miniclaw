@@ -4,15 +4,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiChannel } from '../../../src/channels/api';
-import { MiniclawAgent } from '../../../src/core/agent';
+import type { MiniclawGateway } from '../../../src/core/gateway/index.js';
 import type { Config } from '../../../src/core/config';
-
-// Mock MiniclawAgent
-vi.mock('../../../src/core/agent');
 
 describe('ApiChannel', () => {
   let mockConfig: Config;
-  let mockAgent: MiniclawAgent;
+  let mockGateway: MiniclawGateway;
 
   beforeEach(() => {
     mockConfig = {
@@ -27,26 +24,37 @@ describe('ApiChannel', () => {
       }
     };
 
-    mockAgent = {
-      chat: vi.fn().mockResolvedValue({ content: 'Test response' }),
-      streamChat: vi.fn(),
-      getHistory: vi.fn().mockReturnValue([]),
-      reset: vi.fn(),
-      registerTool: vi.fn(),
-      getTools: vi.fn().mockReturnValue([])
+    // 创建模拟的 streamHandleMessage 生成器
+    const mockGenerator = (async function* () {
+      yield { content: 'Test ', done: false, sessionId: 'session-api' };
+      yield { content: 'response', done: false, sessionId: 'session-api' };
+      yield { done: true, sessionId: 'session-api' };
+    })();
+
+    mockGateway = {
+      handleMessage: vi.fn().mockResolvedValue({ content: 'Test response', sessionId: 'session-api' }),
+      streamHandleMessage: vi.fn().mockReturnValue(mockGenerator),
+      getOrCreateAgent: vi.fn(),
+      getStatus: vi.fn().mockReturnValue({ agentCount: 0, sessionCount: 0 }),
+      destroySession: vi.fn(),
+      cleanup: vi.fn(),
+      getRouter: vi.fn(),
+      getSessionManager: vi.fn(),
+      getAgentRegistry: vi.fn(),
+      getConfig: vi.fn().mockReturnValue(mockConfig)
     } as any;
   });
 
   describe('constructor', () => {
-    it('should create API channel with agent and config', () => {
-      const api = new ApiChannel(mockAgent, mockConfig);
+    it('should create API channel with gateway', () => {
+      const api = new ApiChannel(mockGateway);
       expect(api).toBeDefined();
     });
   });
 
   describe('getApp', () => {
     it('should return Express app', () => {
-      const api = new ApiChannel(mockAgent, mockConfig);
+      const api = new ApiChannel(mockGateway);
       const app = api.getApp();
       expect(app).toBeDefined();
     });
@@ -54,13 +62,13 @@ describe('ApiChannel', () => {
 
   describe('start', () => {
     it('should start server on configured port', async () => {
-      const api = new ApiChannel(mockAgent, mockConfig);
-      
+      const api = new ApiChannel(mockGateway);
+
       await api.start();
-      
+
       // 验证服务器启动
       expect(api.isRunning()).toBe(true);
-      
+
       // 关闭服务器
       await api.stop();
     });
@@ -68,11 +76,11 @@ describe('ApiChannel', () => {
 
   describe('stop', () => {
     it('should stop server', async () => {
-      const api = new ApiChannel(mockAgent, mockConfig);
-      
+      const api = new ApiChannel(mockGateway);
+
       await api.start();
       await api.stop();
-      
+
       expect(api.isRunning()).toBe(false);
     });
   });

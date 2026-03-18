@@ -6,30 +6,30 @@
  */
 
 import * as readline from 'readline';
-import type { MiniclawAgent } from '../core/agent/index.js';
+import type { MiniclawGateway } from '../core/gateway/index.js';
 import { handleCliCommand } from './cli-commands.js';
 import { globalLifecycle } from '../core/lifecycle.js';
 
 /**
  * CLI 通道类
- * 
+ *
  * 提供命令行交互界面，支持：
  * - 与 AI 对话
  * - 执行内置命令（/help、/exit 等）
  * - 流式输出
- * 
+ *
  * @example
  * ```ts
- * const cli = new CliChannel(agent);
+ * const cli = new CliChannel(gateway);
  * await cli.start();
  * ```
- * 
+ *
  * @class
  * @public
  */
 export class CliChannel implements Channel {
-  /** Agent 实例 */
-  private agent: MiniclawAgent;
+  /** Gateway 实例 */
+  private gateway: MiniclawGateway;
   /** readline 接口 */
   private rl: readline.Interface | null = null;
   /** 是否运行中 */
@@ -37,16 +37,16 @@ export class CliChannel implements Channel {
 
   /**
    * 创建 CLI 通道实例
-   * 
-   * @param agent - Miniclaw Agent 实例
+   *
+   * @param gateway - Miniclaw Gateway 实例
    */
-  constructor(agent: MiniclawAgent) {
-    this.agent = agent;
+  constructor(gateway: MiniclawGateway) {
+    this.gateway = gateway;
   }
 
   /**
    * 启动 CLI 界面
-   * 
+   *
    * 开始监听用户输入，直到用户输入 /exit 或 /quit
    */
   async start(): Promise<void> {
@@ -68,7 +68,7 @@ export class CliChannel implements Channel {
     return new Promise((resolve) => {
       this.rl!.on('line', async (input) => {
         const trimmed = input.trim();
-        
+
         if (!trimmed) {
           this.rl!.prompt();
           return;
@@ -87,22 +87,31 @@ export class CliChannel implements Channel {
 
   /**
    * 处理用户输入
-   * 
+   *
    * @param input - 用户输入的文本
    */
   async processInput(input: string): Promise<void> {
+    // 获取 Agent 用于命令处理
+    const { agent } = this.gateway.getOrCreateAgent({
+      channel: 'cli',
+      content: input
+    });
+
     // 先检查是否是命令
-    const isCommand = await handleCliCommand(input, this.agent);
-    
+    const isCommand = await handleCliCommand(input, agent);
+
     if (isCommand) {
       return;
     }
 
     // 普通对话 - 流式输出
     process.stdout.write('\n');
-    
-    const generator = this.agent.streamChat(input);
-    
+
+    const generator = this.gateway.streamHandleMessage({
+      channel: 'cli',
+      content: input
+    });
+
     for await (const chunk of generator) {
       // 显示工具执行状态
       if (chunk.toolName && chunk.toolStatus) {
@@ -112,17 +121,17 @@ export class CliChannel implements Channel {
           // 工具执行完成，可以在这里显示结果摘要
         }
       }
-      
+
       // 显示文本内容
       if (chunk.content) {
         process.stdout.write(chunk.content);
       }
-      
+
       if (chunk.done) {
         break;
       }
     }
-    
+
     process.stdout.write('\n\n');
   }
 

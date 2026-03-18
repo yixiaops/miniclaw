@@ -1,0 +1,333 @@
+/**
+ * @fileoverview Miniclaw Gateway - 系统统一入口
+ *
+ * 整合 Router、SessionManager、AgentRegistry，提供消息处理的核心流程。
+ *
+ * @module core/gateway
+ */
+
+import { Router, type RouteContext } from './router.js';
+import { SessionManager, type SessionConfig } from './session.js';
+import { AgentRegistry, type CreateAgentFn } from '../agent/registry.js';
+import type { Config } from '../config.js';
+import type { MiniclawAgent, StreamChatEvent } from '../agent/index.js';
+
+/**
+ * 消息上下文
+ */
+export interface MessageContext {
+  /** 通道类型 */
+  channel: string;
+  /** 用户 ID */
+  userId?: string;
+  /** 群组 ID */
+  groupId?: string;
+  /** API 客户端 ID */
+  clientId?: string;
+  /** 消息内容 */
+  content: string;
+}
+
+/**
+ * 响应结构
+ */
+export interface Response {
+  /** 响应内容 */
+  content: string;
+  /** Session ID */
+  sessionId: string;
+}
+
+/**
+ * Gateway 状态
+ */
+export interface GatewayStatus {
+  /** Agent 数量 */
+  agentCount: number;
+  /** Session 数量 */
+  sessionCount: number;
+}
+
+/**
+ * Gateway 配置
+ */
+export interface GatewayConfig {
+  /** 创建 Agent 的工厂函数 */
+  createAgentFn: CreateAgentFn;
+  /** 最大 Agent 数量 */
+  maxAgents?: number;
+  /** Session 配置 */
+  sessionConfig?: Partial<SessionConfig>;
+}
+
+/**
+ * 默认 Session 配置
+ */
+const DEFAULT_SESSION_CONFIG: SessionConfig = {
+  maxHistoryLength: 50,
+  sessionTtl: 3600000, // 1小时
+  maxConcurrentSessions: 100,
+  persistence: 'memory'
+};
+
+/**
+ * MiniclawGateway 类
+ *
+ * 系统的统一入口，协调各个组件完成消息处理流程。
+ *
+ * ## 消息处理流程
+ *
+ * 1. Router.route(ctx) → sessionId
+ * 2. SessionManager.getOrCreate(sessionId) → session
+ * 3. AgentRegistry.getOrCreate(sessionId) → agent
+ * 4. agent.chat(ctx.content) → response
+ * 5. session.addMessage(user + assistant)
+ * 6. 返回 response
+ *
+ * @example
+ * ```ts
+ * const gateway = new MiniclawGateway(config, {
+ *   createAgentFn: (sessionKey, config) => new MiniclawAgent(config)
+ * });
+ *
+ * const response = await gateway.handleMessage({
+ *   channel: 'cli',
+ *   content: '你好'
+ * });
+ * ```
+ */
+export class MiniclawGateway {
+  /** 路由器 */
+  private router: Router;
+
+  /** Session 管理器 */
+  private sessionManager: SessionManager;
+
+  /** Agent 注册表 */
+  private agentRegistry: AgentRegistry;
+
+  /** 配置 */
+  private config: Config;
+
+  /**
+   * 创建 MiniclawGateway 实例
+   *
+   * @param config - Miniclaw 配置
+   * @param gatewayConfig - Gateway 配置
+   */
+  constructor(config: Config, gatewayConfig: GatewayConfig) {
+    this.config = config;
+
+    // 初始化路由器
+    this.router = new Router({
+      rules: [],
+      defaultStrategy: 'byUser'
+    });
+
+    // 初始化 Session 管理器
+    const sessionConfig: SessionConfig = {
+      ...DEFAULT_SESSION_CONFIG,
+      ...gatewayConfig.sessionConfig
+    };
+    this.sessionManager = new SessionManager(sessionConfig);
+
+    // 初始化 Agent 注册表
+    this.agentRegistry = new AgentRegistry(
+      config,
+      gatewayConfig.createAgentFn,
+      gatewayConfig.maxAgents
+    );
+  }
+
+  /**
+   * 处理消息
+   *
+   * @param ctx - 消息上下文
+   * @returns 响应
+   */
+  async handleMessage(ctx: MessageContext): Promise<Response> {
+    // 1. 路由消息到 Session
+    const sessionId = this.router.route(this.toRouteContext(ctx));
+
+    // 2. 获取或创建 Session
+    const session = this.sessionManager.getOrCreate(sessionId, {
+      channel: ctx.channel,
+      userId: ctx.userId,
+      groupId: ctx.groupId
+    });
+
+    // 3. 获取或创建 Agent
+    const agent = this.agentRegistry.getOrCreate(sessionId);
+
+    // 4. 调用 Agent 处理消息
+    const response = await agent.chat(ctx.content);
+
+    // 5. 记录消息到 Session 历史
+    session.addMessage({
+      role: 'user',
+      content: ctx.content
+    });
+    session.addMessage({
+      role: 'assistant',
+      content: response.content
+    });
+
+    // 6. 返回响应
+    return {
+      content: response.content,
+      sessionId
+    };
+  }
+
+  /**
+   * 流式处理消息
+   *
+   * @param ctx - 消息上下文
+   * @yields 流式响应事件
+   */
+  async *streamHandleMessage(ctx: MessageContext): AsyncGenerator<StreamChatEvent & { sessionId: string }> {
+    // 1. 路由消息到 Session
+    const sessionId = this.router.route(this.toRouteContext(ctx));
+
+    // 2. 获取或创建 Session
+    const session = this.sessionManager.getOrCreate(sessionId, {
+      channel: ctx.channel,
+      userId: ctx.userId,
+      groupId: ctx.groupId
+    });
+
+    // 3. 获取或创建 Agent
+    const agent = this.agentRegistry.getOrCreate(sessionId);
+
+    // 4. 记录用户消息到 Session 历史
+    session.addMessage({
+      role: 'user',
+      content: ctx.content
+    });
+
+    // 5. 流式调用 Agent 处理消息
+    let fullContent = '';
+    for await (const event of agent.streamChat(ctx.content)) {
+      if (event.content) {
+        fullContent += event.content;
+      }
+      yield { ...event, sessionId };
+
+      if (event.done) {
+        break;
+      }
+    }
+
+    // 6. 记录助手消息到 Session 历史
+    session.addMessage({
+      role: 'assistant',
+      content: fullContent
+    });
+  }
+
+  /**
+   * 获取或创建指定上下文的 Agent
+   *
+   * @param ctx - 消息上下文
+   * @returns Agent 实例和 Session ID
+   */
+  getOrCreateAgent(ctx: MessageContext): { agent: MiniclawAgent; sessionId: string } {
+    const sessionId = this.router.route(this.toRouteContext(ctx));
+
+    // 确保 Session 存在
+    this.sessionManager.getOrCreate(sessionId, {
+      channel: ctx.channel,
+      userId: ctx.userId,
+      groupId: ctx.groupId
+    });
+
+    const agent = this.agentRegistry.getOrCreate(sessionId);
+    return { agent, sessionId };
+  }
+
+  /**
+   * 获取 Gateway 状态
+   *
+   * @returns 状态信息
+   */
+  getStatus(): GatewayStatus {
+    return {
+      agentCount: this.agentRegistry.count(),
+      sessionCount: this.sessionManager.count()
+    };
+  }
+
+  /**
+   * 销毁指定的 Session
+   *
+   * @param sessionId - Session ID
+   */
+  destroySession(sessionId: string): void {
+    this.agentRegistry.destroy(sessionId);
+    this.sessionManager.destroy(sessionId);
+  }
+
+  /**
+   * 清理所有资源
+   */
+  cleanup(): void {
+    this.agentRegistry.destroyAll();
+    // SessionManager 没有destroyAll，需要逐个清理
+    const sessions = this.sessionManager.getAll();
+    for (const session of sessions) {
+      this.sessionManager.destroy(session.id);
+    }
+  }
+
+  /**
+   * 获取路由器实例
+   *
+   * @returns Router 实例
+   */
+  getRouter(): Router {
+    return this.router;
+  }
+
+  /**
+   * 获取 Session 管理器实例
+   *
+   * @returns SessionManager 实例
+   */
+  getSessionManager(): SessionManager {
+    return this.sessionManager;
+  }
+
+  /**
+   * 获取 Agent 注册表实例
+   *
+   * @returns AgentRegistry 实例
+   */
+  getAgentRegistry(): AgentRegistry {
+    return this.agentRegistry;
+  }
+
+  /**
+   * 获取配置
+   *
+   * @returns 配置对象
+   */
+  getConfig(): Config {
+    return this.config;
+  }
+
+  /**
+   * 将 MessageContext 转换为 RouteContext
+   *
+   * @param ctx - 消息上下文
+   * @returns 路由上下文
+   */
+  private toRouteContext(ctx: MessageContext): RouteContext {
+    return {
+      channel: ctx.channel,
+      userId: ctx.userId,
+      groupId: ctx.groupId,
+      clientId: ctx.clientId,
+      content: ctx.content
+    };
+  }
+}

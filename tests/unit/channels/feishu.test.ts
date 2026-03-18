@@ -4,15 +4,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FeishuChannel } from '../../../src/channels/feishu';
-import { MiniclawAgent } from '../../../src/core/agent';
+import type { MiniclawGateway } from '../../../src/core/gateway/index.js';
 import type { Config } from '../../../src/core/config';
-
-// Mock MiniclawAgent
-vi.mock('../../../src/core/agent');
 
 describe('FeishuChannel', () => {
   let mockConfig: Config;
-  let mockAgent: MiniclawAgent;
+  let mockGateway: MiniclawGateway;
 
   beforeEach(() => {
     mockConfig = {
@@ -31,33 +28,41 @@ describe('FeishuChannel', () => {
       }
     };
 
-    mockAgent = {
-      chat: vi.fn().mockResolvedValue({ content: 'Test response' }),
-      streamChat: vi.fn(),
-      getHistory: vi.fn().mockReturnValue([]),
-      reset: vi.fn(),
-      registerTool: vi.fn(),
-      getTools: vi.fn().mockReturnValue([])
+    mockGateway = {
+      handleMessage: vi.fn().mockResolvedValue({ content: 'Test response', sessionId: 'session-feishu' }),
+      streamHandleMessage: vi.fn(),
+      getOrCreateAgent: vi.fn(),
+      getStatus: vi.fn().mockReturnValue({ agentCount: 0, sessionCount: 0 }),
+      destroySession: vi.fn(),
+      cleanup: vi.fn(),
+      getRouter: vi.fn(),
+      getSessionManager: vi.fn(),
+      getAgentRegistry: vi.fn(),
+      getConfig: vi.fn().mockReturnValue(mockConfig)
     } as any;
   });
 
   describe('constructor', () => {
-    it('should create Feishu channel with agent and config', () => {
-      const feishu = new FeishuChannel(mockAgent, mockConfig);
+    it('should create Feishu channel with gateway', () => {
+      const feishu = new FeishuChannel(mockGateway);
       expect(feishu).toBeDefined();
     });
 
     it('should throw error if feishu config is missing', () => {
       const configWithoutFeishu = { ...mockConfig, feishu: undefined };
-      
-      expect(() => new FeishuChannel(mockAgent, configWithoutFeishu)).toThrow();
+      const gatewayWithoutFeishu = {
+        ...mockGateway,
+        getConfig: vi.fn().mockReturnValue(configWithoutFeishu)
+      } as any;
+
+      expect(() => new FeishuChannel(gatewayWithoutFeishu)).toThrow();
     });
   });
 
   describe('start', () => {
     it('should start WebSocket connection', async () => {
-      const feishu = new FeishuChannel(mockAgent, mockConfig);
-      
+      const feishu = new FeishuChannel(mockGateway);
+
       // start 应该初始化 WebSocket 连接
       expect(feishu.start).toBeDefined();
     });
@@ -65,45 +70,45 @@ describe('FeishuChannel', () => {
 
   describe('stop', () => {
     it('should stop WebSocket connection', () => {
-      const feishu = new FeishuChannel(mockAgent, mockConfig);
-      
+      const feishu = new FeishuChannel(mockGateway);
+
       expect(feishu.stop).toBeDefined();
     });
   });
 
   describe('processMessage', () => {
     it('should process text message and return response', async () => {
-      const feishu = new FeishuChannel(mockAgent, mockConfig);
-      
+      const feishu = new FeishuChannel(mockGateway);
+
       const response = await feishu.processMessage({
         messageId: 'test_msg_id',
         messageType: 'text',
         content: 'Hello',
         senderId: 'ou_test_user'
       });
-      
-      expect(mockAgent.chat).toHaveBeenCalledWith('Hello');
+
+      expect(mockGateway.handleMessage).toHaveBeenCalled();
       expect(response).toBeDefined();
     });
 
     it('should handle empty message', async () => {
-      const feishu = new FeishuChannel(mockAgent, mockConfig);
-      
+      const feishu = new FeishuChannel(mockGateway);
+
       const response = await feishu.processMessage({
         messageId: 'test_msg_id',
         messageType: 'text',
         content: '',
         senderId: 'ou_test_user'
       });
-      
+
       expect(response).toBeNull();
     });
   });
 
   describe('sendReply', () => {
     it('should send text reply', async () => {
-      const feishu = new FeishuChannel(mockAgent, mockConfig);
-      
+      const feishu = new FeishuChannel(mockGateway);
+
       // sendReply 应该能够发送回复
       expect(feishu.sendReply).toBeDefined();
     });
