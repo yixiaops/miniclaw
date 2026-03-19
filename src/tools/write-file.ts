@@ -29,7 +29,7 @@ export interface WriteFileDetails {
 export const writeFileTool = {
   name: 'write_file',
   label: '写入文件',
-  description: '将内容写入指定路径的文件',
+  description: '将内容写入指定路径的文件。这是一个原子操作：自动创建所需目录和文件，无需先检查文件是否存在。如果文件已存在则会覆盖。',
   parameters: WriteFileParamsSchema,
 
   /**

@@ -27,7 +27,7 @@ export interface ReadFileDetails {
 export const readFileTool = {
   name: 'read_file',
   label: '读取文件',
-  description: '读取指定路径的文件内容',
+  description: '读取已存在文件的内容。注意：写入文件时使用 write_file 即可，它会自动创建文件，无需先用此工具检查文件是否存在。',
   parameters: ReadFileParamsSchema,
 
   /**
