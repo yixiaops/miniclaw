@@ -42,7 +42,7 @@ describe('writeFileTool', () => {
   });
 
   describe('execute', () => {
-    it('should write file content successfully', async () => {
+    it('should create new file and write content', async () => {
       const testFile = join(testDir, 'test.txt');
       
       // 执行写入操作
@@ -54,7 +54,8 @@ describe('writeFileTool', () => {
       // 验证返回结构
       expect(result.content).toBeDefined();
       expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toContain('成功');
+      expect(result.content[0].text).toContain('创建');
+      expect(result.details.created).toBe(true);
       
       // 验证文件实际写入
       expect(readFileSync(testFile, 'utf-8')).toBe('Hello, Miniclaw!');
@@ -70,23 +71,28 @@ describe('writeFileTool', () => {
       });
       
       // 验证返回结构
-      expect(result.content[0].text).toContain('成功');
+      expect(result.content[0].text).toContain('创建');
+      expect(result.details.created).toBe(true);
       
       // 验证文件实际写入
       expect(readFileSync(testFile, 'utf-8')).toBe('Nested file');
     });
 
-    it('should overwrite existing file', async () => {
-      const testFile = join(testDir, 'overwrite.txt');
+    it('should append to existing file instead of overwriting', async () => {
+      const testFile = join(testDir, 'append.txt');
       
-      // 第一次写入
-      await writeFileTool.execute('', { path: testFile, content: 'Old content' });
+      // 第一次写入（创建文件）
+      const result1 = await writeFileTool.execute('', { path: testFile, content: 'First line\n' });
+      expect(result1.content[0].text).toContain('创建');
+      expect(result1.details.created).toBe(true);
       
-      // 第二次写入（覆盖）
-      await writeFileTool.execute('', { path: testFile, content: 'New content' });
+      // 第二次写入（追加）
+      const result2 = await writeFileTool.execute('', { path: testFile, content: 'Second line\n' });
+      expect(result2.content[0].text).toContain('追加');
+      expect(result2.details.created).toBe(false);
       
-      // 验证文件被覆盖
-      expect(readFileSync(testFile, 'utf-8')).toBe('New content');
+      // 验证文件内容被追加，不是覆盖
+      expect(readFileSync(testFile, 'utf-8')).toBe('First line\nSecond line\n');
     });
 
     it('should write UTF-8 content', async () => {
@@ -99,7 +105,7 @@ describe('writeFileTool', () => {
       });
       
       // 验证返回结构
-      expect(result.content[0].text).toContain('成功');
+      expect(result.content[0].text).toContain('创建');
       
       // 验证 UTF-8 内容正确写入
       expect(readFileSync(testFile, 'utf-8')).toBe('你好，世界！🌍');
