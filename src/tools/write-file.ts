@@ -2,7 +2,7 @@
  * 文件写入工具
  * 将内容写入指定路径的文件
  */
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { Type, type Static } from '@sinclair/typebox';
 
@@ -21,6 +21,7 @@ type WriteFileParams = Static<typeof WriteFileParamsSchema>;
  */
 export interface WriteFileDetails {
   path: string;
+  created: boolean;  // true: 新创建, false: 追加到已有文件
 }
 
 /**
@@ -29,7 +30,7 @@ export interface WriteFileDetails {
 export const writeFileTool = {
   name: 'write_file',
   label: '写入文件',
-  description: '将内容写入指定路径的文件。这是一个原子操作：自动创建所需目录和文件，无需先检查文件是否存在。如果文件已存在则会覆盖。',
+  description: '将内容写入指定路径的文件。如果文件已存在则追加内容，不存在则创建新文件。自动创建所需目录。',
   parameters: WriteFileParamsSchema,
 
   /**
@@ -47,18 +48,29 @@ export const writeFileTool = {
       const dir = dirname(path);
       mkdirSync(dir, { recursive: true });
 
-      // 写入文件
-      writeFileSync(path, content, 'utf-8');
+      // 检查文件是否存在
+      const fileExists = existsSync(path);
 
-      return {
-        content: [{ type: 'text', text: `文件已成功写入: ${path}` }],
-        details: { path }
-      };
+      if (fileExists) {
+        // 文件已存在，追加内容
+        appendFileSync(path, content, 'utf-8');
+        return {
+          content: [{ type: 'text', text: `内容已追加到文件: ${path}` }],
+          details: { path, created: false }
+        };
+      } else {
+        // 文件不存在，创建新文件
+        writeFileSync(path, content, 'utf-8');
+        return {
+          content: [{ type: 'text', text: `文件已创建并写入: ${path}` }],
+          details: { path, created: true }
+        };
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         content: [{ type: 'text', text: `写入文件失败: ${errorMsg}` }],
-        details: { path }
+        details: { path, created: false }
       };
     }
   }
