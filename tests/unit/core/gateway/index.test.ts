@@ -214,4 +214,176 @@ describe('MiniclawGateway', () => {
       expect(status.sessionCount).toBe(0);
     });
   });
+
+  describe('initialize', () => {
+    it('应该从存储加载 Session 历史', async () => {
+      // 创建带有自定义存储目录的 gateway
+      const initCreateAgentFn = vi.fn(() => createMockAgent());
+      const initGateway = new MiniclawGateway(mockConfig, {
+        createAgentFn: initCreateAgentFn,
+        storageDir: '/tmp/miniclaw-test-init'
+      });
+
+      // 先创建一个 session 并保存消息
+      await initGateway.handleMessage({ channel: 'cli', content: 'test message' });
+
+      // 清理资源但保留存储
+      initGateway.cleanup();
+
+      // 创建新的 gateway 实例来模拟重启
+      const newCreateAgentFn = vi.fn(() => createMockAgent());
+      const newGateway = new MiniclawGateway(mockConfig, {
+        createAgentFn: newCreateAgentFn,
+        storageDir: '/tmp/miniclaw-test-init'
+      });
+
+      // 初始化应该加载之前的 session
+      await newGateway.initialize();
+
+      const status = newGateway.getStatus();
+      expect(status.sessionCount).toBe(1);
+
+      newGateway.cleanup();
+    });
+
+    it('应该处理空存储', async () => {
+      const emptyCreateAgentFn = vi.fn(() => createMockAgent());
+      const emptyGateway = new MiniclawGateway(mockConfig, {
+        createAgentFn: emptyCreateAgentFn,
+        storageDir: '/tmp/miniclaw-test-empty-' + Date.now()
+      });
+
+      // 初始化空存储
+      await emptyGateway.initialize();
+
+      const status = emptyGateway.getStatus();
+      expect(status.sessionCount).toBe(0);
+
+      emptyGateway.cleanup();
+    });
+  });
+
+  describe('streamHandleMessage', () => {
+    it('应该流式处理消息', async () => {
+      const ctx = {
+        channel: 'cli',
+        content: '你好'
+      };
+
+      const events = [];
+      for await (const event of gateway.streamHandleMessage(ctx)) {
+        events.push(event);
+      }
+
+      expect(events.length).toBeGreaterThan(0);
+      expect(events[0]).toHaveProperty('sessionId');
+      expect(events[events.length - 1].done).toBe(true);
+    });
+
+    it('应该在流式处理中记录消息历史', async () => {
+      const ctx = {
+        channel: 'cli',
+        content: '测试流式消息'
+      };
+
+      // 消费流
+      for await (const _ of gateway.streamHandleMessage(ctx)) {
+        // 消费所有事件
+      }
+
+      // 验证 session 状态
+      const status = gateway.getStatus();
+      expect(status.sessionCount).toBe(1);
+      expect(status.agentCount).toBe(1);
+    });
+
+    it('应该为不同用户创建独立的流式 session', async () => {
+      const ctx1 = {
+        channel: 'feishu',
+        userId: 'stream-user-1',
+        content: '消息1'
+      };
+
+      const ctx2 = {
+        channel: 'feishu',
+        userId: 'stream-user-2',
+        content: '消息2'
+      };
+
+      // 消费两个流
+      for await (const _ of gateway.streamHandleMessage(ctx1)) {}
+      for await (const _ of gateway.streamHandleMessage(ctx2)) {}
+
+      // 验证创建了两个 session
+      expect(createAgentFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('getOrCreateAgent', () => {
+    it('应该返回 Agent 和 sessionId', () => {
+      const ctx = {
+        channel: 'cli',
+        content: 'test'
+      };
+
+      const result = gateway.getOrCreateAgent(ctx);
+
+      expect(result).toHaveProperty('agent');
+      expect(result).toHaveProperty('sessionId');
+      expect(result.agent).toBeDefined();
+      expect(result.sessionId).toBe('session-cli');
+    });
+
+    it('应该创建对应的 Session', () => {
+      const ctx = {
+        channel: 'api',
+        clientId: 'client-123',
+        content: 'test'
+      };
+
+      gateway.getOrCreateAgent(ctx);
+
+      const status = gateway.getStatus();
+      expect(status.sessionCount).toBe(1);
+    });
+
+    it('应该复用已存在的 Agent', () => {
+      const ctx = {
+        channel: 'cli',
+        content: 'test'
+      };
+
+      const result1 = gateway.getOrCreateAgent(ctx);
+      const result2 = gateway.getOrCreateAgent(ctx);
+
+      expect(result1.sessionId).toBe(result2.sessionId);
+      expect(createAgentFn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getter methods', () => {
+    it('应该返回 Router 实例', () => {
+      const router = gateway.getRouter();
+      expect(router).toBeDefined();
+      expect(typeof router.route).toBe('function');
+    });
+
+    it('应该返回 SessionManager 实例', () => {
+      const sessionManager = gateway.getSessionManager();
+      expect(sessionManager).toBeDefined();
+      expect(typeof sessionManager.getOrCreate).toBe('function');
+    });
+
+    it('应该返回 AgentRegistry 实例', () => {
+      const agentRegistry = gateway.getAgentRegistry();
+      expect(agentRegistry).toBeDefined();
+      expect(typeof agentRegistry.getOrCreate).toBe('function');
+    });
+
+    it('应该返回 Config 实例', () => {
+      const config = gateway.getConfig();
+      expect(config).toBeDefined();
+      expect(config).toEqual(mockConfig);
+    });
+  });
 });

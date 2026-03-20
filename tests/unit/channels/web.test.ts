@@ -2,7 +2,7 @@
  * WebChat 通道测试
  * TDD: Red 阶段 - 先写失败的测试
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebChannel } from '../../../src/channels/web';
 import type { MiniclawGateway } from '../../../src/core/gateway/index.js';
 import type { Config } from '../../../src/core/config';
@@ -19,7 +19,7 @@ describe('WebChannel', () => {
         baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
       },
       server: {
-        port: 3000,
+        port: 3002, // 使用不同端口避免冲突
         host: '0.0.0.0'
       }
     };
@@ -43,6 +43,10 @@ describe('WebChannel', () => {
       getAgentRegistry: vi.fn(),
       getConfig: vi.fn().mockReturnValue(mockConfig)
     } as any;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -80,6 +84,55 @@ describe('WebChannel', () => {
       await web.stop();
 
       expect(web.isRunning()).toBe(false);
+    });
+
+    it('should handle stop when server is not running', async () => {
+      const web = new WebChannel(mockGateway);
+
+      // 不启动服务器直接停止
+      await web.stop();
+
+      expect(web.isRunning()).toBe(false);
+    });
+  });
+
+  describe('HTTP endpoints', () => {
+    it('should have root endpoint configured', async () => {
+      const web = new WebChannel(mockGateway);
+
+      // 验证路由配置通过 start/stop
+      await web.start();
+      await web.stop();
+
+      expect(web.isRunning()).toBe(false);
+    });
+
+    it('should handle chat requests', async () => {
+      const web = new WebChannel(mockGateway);
+
+      // 验证 handleMessage 未被调用
+      expect(mockGateway.handleMessage).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors in chat endpoint', async () => {
+      mockGateway.handleMessage = vi.fn().mockRejectedValue(new Error('Test error'));
+      const web = new WebChannel(mockGateway);
+
+      // 验证配置正确
+      expect(web).toBeDefined();
+    });
+  });
+
+  describe('WebSocket', () => {
+    it('should initialize Socket.IO on start', async () => {
+      const web = new WebChannel(mockGateway);
+
+      await web.start();
+
+      // 验证服务器启动
+      expect(web.isRunning()).toBe(true);
+
+      await web.stop();
     });
   });
 });

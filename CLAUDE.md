@@ -123,3 +123,10 @@ MINICLAW_FEISHU_APP_SECRET=...
 - Prettier: single quotes, semicolons, 2-space indent, 100 char line width
 - ESLint: `@typescript-eslint/recommended` + explicit return types
 - Chinese comments used throughout for documentation
+
+## Active Technologies
+- TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架) (002-improve-test-coverage)
+- SimpleMemoryStorage (内存存储，可选文件持久化) (002-improve-test-coverage)
+
+## Recent Changes
+- 002-improve-test-coverage: Added TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)
