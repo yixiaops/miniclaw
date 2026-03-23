@@ -192,15 +192,18 @@ class SkillManager {
 
 #### 对比 OpenClaw，miniclaw 缺少的重要能力：
 
-| 能力 | OpenClaw | Miniclaw | 优先级 |
-|------|----------|----------|--------|
-| **web_search** | ✅ web-search.ts | ❌ | P2 |
-| **sessions_spawn** | ✅ 子代理 | ❌ | P2 |
-| **tts** | ✅ 文字转语音 | ❌ | P3 |
-| **cron** | ✅ 定时任务 | ❌ | P2 |
-| **image** | ✅ 图像处理 | ❌ | P3 |
-| **pdf** | ✅ PDF 处理 | ❌ | P3 |
-| **browser** | ✅ 浏览器控制 | ❌ | P3 |
+| 能力 | OpenClaw | Miniclaw | 优先级 | 说明 |
+|------|----------|----------|--------|------|
+| **web_search** | ✅ | ❌ | P2 | 网页搜索 |
+| **sessions_spawn** | ✅ | ❌ | P2 | 子代理 |
+| **nodes** | ✅ | ❌ | P2 | 设备控制（手机/电脑） |
+| **message** | ✅ | ❌ | P2 | 跨通道消息发送 |
+| **cron** | ✅ | ❌ | P2 | 定时任务 |
+| **browser** | ✅ | ❌ | P3 | 浏览器控制 |
+| **tts** | ✅ | ❌ | P3 | 文字转语音 |
+| **image** | ✅ | ❌ | P3 | 图像处理 |
+| **pdf** | ✅ | ❌ | P3 | PDF 处理 |
+| **canvas** | ✅ | ❌ | P3 | Canvas 展示 |
 
 #### P2 能力详情
 
@@ -228,7 +231,37 @@ interface SpawnParams {
 // 创建独立的子代理执行任务
 ```
 
-**3. cron（定时任务）**
+**3. nodes（设备控制）**
+
+```typescript
+interface NodesParams {
+  action: 'status' | 'camera_snap' | 'screen_record' | 'location_get' | 'notify' | 'run';
+  nodeId?: string;
+  // 根据不同 action 有不同参数
+}
+
+// 支持操作：
+// - camera_snap: 拍照
+// - screen_record: 屏幕录制
+// - location_get: 获取位置
+// - notify: 发送通知
+// - run: 执行命令
+```
+
+**4. message（跨通道消息）**
+
+```typescript
+interface MessageParams {
+  action: 'send';
+  target: string;    // 目标用户/群组
+  message: string;
+  channel?: string;  // feishu/discord/telegram 等
+}
+
+// 跨通道发送消息
+```
+
+**5. cron（定时任务）**
 
 ```typescript
 interface CronParams {
@@ -242,7 +275,20 @@ interface CronParams {
 
 #### P3 能力详情
 
-**4. tts（文字转语音）**
+**6. browser（浏览器控制）**
+
+```typescript
+interface BrowserParams {
+  action: 'open' | 'click' | 'type' | 'screenshot' | 'close';
+  url?: string;
+  selector?: string;
+  text?: string;
+}
+
+// 浏览器自动化操作
+```
+
+**7. tts（文字转语音）**
 
 ```typescript
 interface TTSParams {
@@ -253,7 +299,7 @@ interface TTSParams {
 // 调用 TTS API 转语音
 ```
 
-**5. image（图像处理）**
+**8. image（图像处理）**
 
 ```typescript
 interface ImageParams {
@@ -262,6 +308,18 @@ interface ImageParams {
 }
 
 // 图像描述或生成
+```
+
+**9. canvas（Canvas 展示）**
+
+```typescript
+interface CanvasParams {
+  action: 'present' | 'hide' | 'navigate';
+  url?: string;
+  html?: string;
+}
+
+// 在 Canvas 中展示内容
 ```
 
 ---
@@ -293,9 +351,13 @@ interface ImageParams {
 |------|------|--------|
 | web_search 工具 | 1h | P2 |
 | sessions_spawn 工具 | 2h | P2 |
+| nodes 工具（设备控制） | 3h | P2 |
+| message 工具（跨通道消息） | 1.5h | P2 |
 | cron 工具 | 1.5h | P2 |
+| browser 工具 | 3h | P3 |
 | tts 工具 | 1h | P3 |
 | image 工具 | 2h | P3 |
+| canvas 工具 | 2h | P3 |
 
 ---
 
@@ -319,6 +381,8 @@ interface ImageParams {
 
 - [ ] web_search 可搜索网页
 - [ ] sessions_spawn 可创建子代理
+- [ ] nodes 可控制设备（拍照/录屏/位置）
+- [ ] message 可跨通道发送消息
 - [ ] cron 可创建定时任务
 
 ---
