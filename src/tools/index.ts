@@ -6,8 +6,10 @@ import { readFileTool } from './read-file.js';
 import { writeFileTool } from './write-file.js';
 import { shellTool } from './shell.js';
 import { webFetchTool } from './web-fetch.js';
+import { memorySearchTool } from './memory-search.js';
+import { memoryGetTool } from './memory-get.js';
 
-export { readFileTool, writeFileTool, shellTool, webFetchTool };
+export { readFileTool, writeFileTool, shellTool, webFetchTool, memorySearchTool, memoryGetTool };
 
 /**
  * 获取所有内置工具列表
@@ -17,6 +19,8 @@ export function getBuiltinTools() {
     readFileTool,
     writeFileTool,
     shellTool,
-    webFetchTool
+    webFetchTool,
+    memorySearchTool,
+    memoryGetTool
   ];
 }
