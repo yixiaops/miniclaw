@@ -200,7 +200,6 @@ class SkillManager {
 | **message** | ✅ | ❌ | P2 | 跨通道消息发送 |
 | **cron** | ✅ | ❌ | P2 | 定时任务 |
 | **browser** | ✅ | ❌ | P3 | 浏览器控制 |
-| **tts** | ✅ | ❌ | P3 | 文字转语音 |
 | **image** | ✅ | ❌ | P3 | 图像处理 |
 | **pdf** | ✅ | ❌ | P3 | PDF 处理 |
 | **canvas** | ✅ | ❌ | P3 | Canvas 展示 |
@@ -288,18 +287,7 @@ interface BrowserParams {
 // 浏览器自动化操作
 ```
 
-**7. tts（文字转语音）**
-
-```typescript
-interface TTSParams {
-  text: string;
-  voice?: string;
-}
-
-// 调用 TTS API 转语音
-```
-
-**8. image（图像处理）**
+**7. image（图像处理）**
 
 ```typescript
 interface ImageParams {
@@ -310,7 +298,7 @@ interface ImageParams {
 // 图像描述或生成
 ```
 
-**9. canvas（Canvas 展示）**
+**8. canvas（Canvas 展示）**
 
 ```typescript
 interface CanvasParams {
@@ -355,7 +343,6 @@ interface CanvasParams {
 | message 工具（跨通道消息） | 1.5h | P2 |
 | cron 工具 | 1.5h | P2 |
 | browser 工具 | 3h | P3 |
-| tts 工具 | 1h | P3 |
 | image 工具 | 2h | P3 |
 | canvas 工具 | 2h | P3 |
 
