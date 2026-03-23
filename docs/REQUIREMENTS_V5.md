@@ -196,7 +196,6 @@ class SkillManager {
 |------|----------|----------|--------|------|
 | **web_search** | ✅ | ❌ | P2 | 网页搜索 |
 | **sessions_spawn** | ✅ | ❌ | P2 | 子代理 |
-| **nodes** | ✅ | ❌ | P2 | 设备控制（手机/电脑） |
 | **message** | ✅ | ❌ | P2 | 跨通道消息发送 |
 | **cron** | ✅ | ❌ | P2 | 定时任务 |
 | **browser** | ✅ | ❌ | P3 | 浏览器控制 |
@@ -230,24 +229,7 @@ interface SpawnParams {
 // 创建独立的子代理执行任务
 ```
 
-**3. nodes（设备控制）**
-
-```typescript
-interface NodesParams {
-  action: 'status' | 'camera_snap' | 'screen_record' | 'location_get' | 'notify' | 'run';
-  nodeId?: string;
-  // 根据不同 action 有不同参数
-}
-
-// 支持操作：
-// - camera_snap: 拍照
-// - screen_record: 屏幕录制
-// - location_get: 获取位置
-// - notify: 发送通知
-// - run: 执行命令
-```
-
-**4. message（跨通道消息）**
+**3. message（跨通道消息）**
 
 ```typescript
 interface MessageParams {
@@ -260,7 +242,7 @@ interface MessageParams {
 // 跨通道发送消息
 ```
 
-**5. cron（定时任务）**
+**4. cron（定时任务）**
 
 ```typescript
 interface CronParams {
@@ -274,7 +256,7 @@ interface CronParams {
 
 #### P3 能力详情
 
-**6. browser（浏览器控制）**
+**5. browser（浏览器控制）**
 
 ```typescript
 interface BrowserParams {
@@ -287,7 +269,7 @@ interface BrowserParams {
 // 浏览器自动化操作
 ```
 
-**7. image（图像处理）**
+**6. image（图像处理）**
 
 ```typescript
 interface ImageParams {
@@ -298,7 +280,7 @@ interface ImageParams {
 // 图像描述或生成
 ```
 
-**8. canvas（Canvas 展示）**
+**7. canvas（Canvas 展示）**
 
 ```typescript
 interface CanvasParams {
@@ -339,7 +321,6 @@ interface CanvasParams {
 |------|------|--------|
 | web_search 工具 | 1h | P2 |
 | sessions_spawn 工具 | 2h | P2 |
-| nodes 工具（设备控制） | 3h | P2 |
 | message 工具（跨通道消息） | 1.5h | P2 |
 | cron 工具 | 1.5h | P2 |
 | browser 工具 | 3h | P3 |
@@ -368,7 +349,6 @@ interface CanvasParams {
 
 - [ ] web_search 可搜索网页
 - [ ] sessions_spawn 可创建子代理
-- [ ] nodes 可控制设备（拍照/录屏/位置）
 - [ ] message 可跨通道发送消息
 - [ ] cron 可创建定时任务
 
