@@ -8,6 +8,7 @@ import type { MiniclawGateway } from '../../../src/core/gateway/index.js';
 
 describe('CliChannel', () => {
   let mockGateway: MiniclawGateway;
+  let mockAgent: any;
 
   beforeEach(() => {
     // 创建模拟的 streamHandleMessage 生成器
@@ -18,14 +19,19 @@ describe('CliChannel', () => {
     })();
 
     // 创建模拟的 Agent
-    const mockAgent = {
+    mockAgent = {
       chat: vi.fn().mockResolvedValue({ content: 'Test response' }),
       streamChat: vi.fn().mockReturnValue(mockGenerator),
       getHistory: vi.fn().mockReturnValue([]),
       reset: vi.fn(),
       registerTool: vi.fn(),
       getTools: vi.fn().mockReturnValue([]),
-      setModel: vi.fn()
+      setModel: vi.fn(),
+      getModelConfig: vi.fn().mockReturnValue({
+        model: 'qwen-plus',
+        provider: 'bailian',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      })
     };
 
     mockGateway = {
@@ -90,6 +96,16 @@ describe('CliChannel', () => {
       exitSpy.mockRestore();
     });
 
+    it('should handle quit command', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      // quit 命令会被识别为命令
+      await cli.processInput('/quit');
+
+      // 验证 getOrCreateAgent 被调用
+      expect(mockGateway.getOrCreateAgent).toHaveBeenCalled();
+    });
+
     it('should handle reset command', async () => {
       const cli = new CliChannel(mockGateway);
 
@@ -98,6 +114,7 @@ describe('CliChannel', () => {
 
       // reset 命令会调用 getOrCreateAgent
       expect(mockGateway.getOrCreateAgent).toHaveBeenCalled();
+      expect(mockAgent.reset).toHaveBeenCalled();
     });
 
     it('should handle help command', async () => {
@@ -112,12 +129,106 @@ describe('CliChannel', () => {
 
       logSpy.mockRestore();
     });
+
+    it('should handle /model command without args to show current model', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await cli.processInput('/model');
+
+      expect(mockAgent.getModelConfig).toHaveBeenCalled();
+      expect(logSpy).toHaveBeenCalled();
+
+      logSpy.mockRestore();
+    });
+
+    it('should handle /model command with args to switch model', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await cli.processInput('/model qwen-max');
+
+      expect(mockAgent.setModel).toHaveBeenCalledWith('qwen-max');
+      expect(logSpy).toHaveBeenCalled();
+
+      logSpy.mockRestore();
+    });
+
+    it('should handle /clear command', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      const clearSpy = vi.spyOn(console, 'clear').mockImplementation(() => {});
+
+      await cli.processInput('/clear');
+
+      expect(clearSpy).toHaveBeenCalled();
+
+      clearSpy.mockRestore();
+    });
+
+    it('should handle unknown command', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await cli.processInput('/unknown');
+
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('未知命令'));
+
+      logSpy.mockRestore();
+    });
+
+    it('should handle tool execution status in stream', async () => {
+      // 创建带有工具状态的生成器
+      const toolGenerator = (async function* () {
+        yield { toolName: 'test-tool', toolStatus: 'start', done: false };
+        yield { toolName: 'test-tool', toolStatus: 'end', done: false };
+        yield { content: 'Tool result', done: false };
+        yield { done: true };
+      })();
+
+      mockGateway.streamHandleMessage = vi.fn().mockReturnValue(toolGenerator);
+
+      const cli = new CliChannel(mockGateway);
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+      await cli.processInput('Use the tool');
+
+      expect(stdoutSpy).toHaveBeenCalled();
+
+      stdoutSpy.mockRestore();
+    });
+
+    it('should handle empty string input', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+      // 空字符串会被当作普通消息处理
+      await cli.processInput('');
+
+      // 空内容也会触发 streamHandleMessage
+      expect(mockGateway.streamHandleMessage).toHaveBeenCalled();
+
+      stdoutSpy.mockRestore();
+    });
   });
 
   describe('stop', () => {
     it('should stop CLI', async () => {
       const cli = new CliChannel(mockGateway);
 
+      await cli.stop();
+
+      expect(cli.isRunning()).toBe(false);
+    });
+
+    it('should be idempotent - calling stop multiple times', async () => {
+      const cli = new CliChannel(mockGateway);
+
+      await cli.stop();
       await cli.stop();
 
       expect(cli.isRunning()).toBe(false);
