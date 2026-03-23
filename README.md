@@ -30,18 +30,33 @@
 │          └──────────┴──────────┴──────────┘                  │
 │                          │                                  │
 │   ┌──────────────────────┴──────────────────────────────┐   │
-│   │                   核心层 (Core)                       │   │
-│   │                                                     │   │
-│   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
-│   │  │   Router    │  │  Session    │  │   Agent     │  │   │
-│   │  │   路由器    │  │  Manager    │  │   核心      │  │   │
-│   │  └─────────────┘  └─────────────┘  └─────────────┘  │   │
-│   │                                                     │   │
-│   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
-│   │  │   Config    │  │  Lifecycle  │  │   Memory    │  │   │
-│   │  │   配置      │  │   生命周期  │  │   记忆      │  │   │
-│   │  └─────────────┘  └─────────────┘  └─────────────┘  │   │
-│   └─────────────────────────────────────────────────────┘   │
+│   │                 Gateway 主类                          │   │
+│   │  - handleMessage() 统一消息入口                        │   │
+│   │  - getStatus() 状态监控                                │   │
+│   │  - cleanup() 资源清理                                  │   │
+│   └──────────────────────┬──────────────────────────────┘   │
+│                          │                                  │
+│          ┌───────────────┼───────────────┐                  │
+│          │               │               │                  │
+│   ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐          │
+│   │   Router    │ │SessionManager│ │AgentRegistry│          │
+│   │   路由器    │ │  会话管理器  │ │ Agent注册表 │          │
+│   └──────┬──────┘ └──────┬──────┘ └──────┬──────┘          │
+│          │               │               │                  │
+│          └───────────────┼───────────────┘                  │
+│                          │                                  │
+│   ┌──────────────────────┴──────────────────────────────┐   │
+│   │                    Agent 核心                         │   │
+│   │  - chat() 对话交互                                    │   │
+│   │  - streamChat() 流式响应                              │   │
+│   │  - registerTool() 工具注册                            │   │
+│   └──────────────────────┬──────────────────────────────┘   │
+│                          │                                  │
+│   ┌──────────────────────┴──────────────────────────────┐   │
+│   │                   记忆系统                            │   │
+│   │  - SimpleMemoryStorage 对话历史持久化                │   │
+│   │  - load() / save() / delete()                        │   │
+│   └──────────────────────────────────────────────────────┘   │
 │                                                             │
 │   ┌──────────────────────────────────────────────────────┐   │
 │   │                    工具层 (Tools)                     │   │
@@ -55,9 +70,13 @@
 
 | 组件 | 职责 | 文件 |
 |------|------|------|
+| **Gateway** | 统一消息入口，整合所有组件 | `src/core/gateway/index.ts` |
 | **Router** | 消息路由，决定消息归属哪个 Session | `src/core/gateway/router.ts` |
 | **SessionManager** | Session 创建、销毁、过期管理 | `src/core/gateway/session.ts` |
+| **AgentRegistry** | Agent 实例管理，复用和清理 | `src/core/agent/registry.ts` |
+| **SessionKeyBuilder** | Session Key 构建/解析 | `src/core/session-key/index.ts` |
 | **Agent** | 与大模型交互、工具调用 | `src/core/agent/index.ts` |
+| **Memory** | 对话历史持久化 | `src/core/memory/simple.ts` |
 | **Channels** | 接收用户消息、返回响应 | `src/channels/*.ts` |
 | **Tools** | 文件操作、Shell、网络请求 | `src/tools/*.ts` |
 
@@ -177,8 +196,10 @@ npm run debug:web
 miniclaw/
 ├── src/
 │   ├── core/                 # 核心模块
-│   │   ├── agent/           # Agent 核心
-│   │   ├── gateway/         # 路由和 Session
+│   │   ├── agent/           # Agent 核心 + 注册表
+│   │   ├── gateway/         # Gateway 主类 + 路由 + Session
+│   │   ├── session-key/     # Session Key 构建/解析
+│   │   ├── memory/          # 记忆系统
 │   │   ├── config.ts        # 配置管理
 │   │   └── lifecycle.ts     # 生命周期
 │   ├── channels/            # 通道层
@@ -195,7 +216,9 @@ miniclaw/
 ├── tests/                   # 测试
 │   ├── unit/               # 单元测试
 │   └── integration/        # 集成测试
-├── doc/                     # 文档
+├── docs/                    # 文档
+│   ├── ARCHITECTURE.md     # 架构设计
+│   ├── BRANCH_STRATEGY.md  # 分支策略
 │   ├── REQUIREMENTS_V3.md  # 三期需求
 │   └── REQUIREMENTS_V4.md  # 四期需求
 └── package.json
@@ -271,21 +294,27 @@ npm run test:coverage
 
 ### 当前测试状态
 
-- ✅ 121 tests passed
-- 📊 平均覆盖率：72%
+- ✅ 238 tests passed
+- 📊 平均覆盖率：78%
 
 | 模块 | 覆盖率 |
 |------|--------|
+| Gateway | 93% |
 | Router | 82% |
 | SessionManager | 94% |
-| Agent | 72% |
+| AgentRegistry | 95% |
+| SessionKeyBuilder | 92% |
+| Agent | 73% |
+| Memory | 97% |
 | Config | 87% |
-| Lifecycle | 89% |
+| Lifecycle | 94% |
 
 ## 文档
 
-- [三期需求：网关架构设计](doc/REQUIREMENTS_V3.md)
-- [四期需求：Gateway 主类 + 记忆系统](doc/REQUIREMENTS_V4.md)
+- [架构设计文档](docs/ARCHITECTURE.md)
+- [分支策略](docs/BRANCH_STRATEGY.md)
+- [三期需求：网关架构设计](docs/REQUIREMENTS_V3.md)
+- [四期需求：Gateway 主类 + 记忆系统](docs/REQUIREMENTS_V4.md)
 
 ## 技术栈
 
@@ -298,6 +327,15 @@ npm run test:coverage
 
 ## 版本历史
 
+### v0.2.0 (2026-03-20) - Gateway + 记忆系统
+
+- ✅ Gateway 主类（统一消息入口）
+- ✅ AgentRegistry（Agent 实例管理）
+- ✅ SessionKeyBuilder（Session Key 构建/解析）
+- ✅ SimpleMemoryStorage（对话历史持久化）
+- ✅ 238 个测试用例
+- 📊 覆盖率提升至 78%
+
 ### v0.1.0 (2026-03-13) - MVP
 
 - ✅ 基础 Agent 框架
@@ -309,10 +347,10 @@ npm run test:coverage
 
 ### 未来计划
 
-- 🔮 Gateway 主类
-- 🔮 记忆持久化
-- 🔮 关键词搜索
+- 🔮 关键词搜索记忆
 - 🔮 向量语义搜索
+- 🔮 WebSocket 增强
+- 🔮 插件机制
 
 ## License
 
