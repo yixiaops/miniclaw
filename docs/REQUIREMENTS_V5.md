@@ -188,7 +188,90 @@ class SkillManager {
 
 ---
 
-### 2.3 基础能力增强（P2-P3）
+### 2.3 多 Agent 协作（P1）
+
+**目标：** 支持主代理创建子代理并行执行任务。
+
+#### 架构设计
+
+```
+主 Agent (main)
+     │
+     │ sessions_spawn
+     ▼
+┌─────────────┐    ┌─────────────┐
+│ Subagent 1  │    │ Subagent 2  │
+│ (etf 分析)  │    │ (政策分析)   │
+└─────────────┘    └─────────────┘
+     │                  │
+     └──────────────────┘
+                ▼
+          结果汇总到主 Agent
+```
+
+#### 核心概念
+
+| 概念 | 说明 |
+|------|------|
+| **Main Agent** | 主代理，处理用户对话 |
+| **Subagent** | 子代理，执行特定任务 |
+| **spawn** | 创建子代理 |
+| **steer** | 向子代理发送指令 |
+| **collect** | 收集子代理结果 |
+
+#### 接口设计
+
+```typescript
+// sessions_spawn: 创建子代理
+interface SpawnParams {
+  task: string;           // 任务描述
+  agentId?: string;       // 指定 agent 类型
+  timeout?: number;       // 超时时间
+  mode: 'run' | 'session'; // run=一次性, session=持久
+}
+
+// subagents: 管理子代理
+interface SubagentsParams {
+  action: 'list' | 'kill' | 'steer';
+  target?: string;        // 子代理 ID
+  message?: string;       // steer 时发送的消息
+}
+```
+
+#### Agent 类型配置
+
+```typescript
+// 配置文件
+{
+  "agents": {
+    "main": { "model": "qwen-turbo" },
+    "etf": { 
+      "model": "qwen-plus",
+      "systemPrompt": "你是 ETF 分析专家..."
+    },
+    "policy": {
+      "model": "qwen-plus", 
+      "systemPrompt": "你是政策分析专家..."
+    }
+  }
+}
+```
+
+#### 使用场景
+
+```
+用户: "帮我分析 ETF 市场和政策环境"
+
+主 Agent:
+  1. sessions_spawn({ task: "分析 ETF 市场", agentId: "etf" })
+  2. sessions_spawn({ task: "分析政策环境", agentId: "policy" })
+  3. 等待两个子代理完成
+  4. 汇总结果返回给用户
+```
+
+---
+
+### 2.4 基础能力增强（P2-P3）
 
 #### 对比 OpenClaw，miniclaw 缺少的重要能力：
 
@@ -306,7 +389,17 @@ interface CanvasParams {
 | Gateway 集成 | 0.5h | ⏳ 待开发 |
 | 测试 | 1h | ⏳ 待开发 |
 
-### Phase 2: 技能系统（P2）
+### Phase 2: 多 Agent 协作（P1）
+
+| 任务 | 工时 | 状态 |
+|------|------|------|
+| Agent 类型配置支持 | 1h | ⏳ 待开发 |
+| sessions_spawn 工具 | 2h | ⏳ 待开发 |
+| subagents 工具 | 1h | ⏳ 待开发 |
+| 结果收集机制 | 1h | ⏳ 待开发 |
+| 测试 | 1h | ⏳ 待开发 |
+
+### Phase 3: 技能系统（P2）
 
 | 任务 | 工时 | 状态 |
 |------|------|------|
@@ -315,7 +408,7 @@ interface CanvasParams {
 | 示例技能（weather） | 0.5h | ⏳ 待开发 |
 | 测试 | 1h | ⏳ 待开发 |
 
-### Phase 3: 基础能力增强（P2-P3）
+### Phase 4: 基础能力增强（P2-P3）
 
 | 任务 | 工时 | 优先级 |
 |------|------|--------|
@@ -338,7 +431,15 @@ interface CanvasParams {
 - [ ] memory_search 可搜索到自动同步的内容
 - [ ] 可配置开启/关闭
 
-### 4.2 技能系统
+### 4.2 多 Agent 协作
+
+- [ ] 可通过 sessions_spawn 创建子代理
+- [ ] 可指定 agentId 创建不同类型的子代理
+- [ ] 子代理并行执行任务
+- [ ] 主代理可收集子代理结果
+- [ ] 支持 subagents list/kill/steer 操作
+
+### 4.3 技能系统
 
 - [ ] 支持 skills/ 目录自动加载
 - [ ] 支持 SKILL.md 定义技能
@@ -369,6 +470,7 @@ interface CanvasParams {
 | 日期 | 版本 | 变更内容 |
 |------|------|----------|
 | 2026-03-23 | v0.5.0 | 五期需求文档：记忆自动同步 + 技能系统 + 基础能力增强 |
+| 2026-03-23 | v0.5.1 | 新增多 Agent 协作设计；移除 nodes、tts 功能 |
 
 ---
 
