@@ -127,4 +127,49 @@ describe('web_search tool', () => {
     expect(parsed.error).toContain('429');
     expect(parsed.results).toEqual([]);
   });
+
+  it('should include country parameter when provided', async () => {
+    process.env.BRAVE_SEARCH_API_KEY = 'test-api-key';
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        web: { results: [] }
+      })
+    });
+    global.fetch = mockFetch;
+
+    await webSearchTool.execute('test-1', { query: 'test', country: 'CN' });
+
+    const calledUrl = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain('country=CN');
+  });
+
+  it('should handle network errors gracefully', async () => {
+    process.env.BRAVE_SEARCH_API_KEY = 'test-api-key';
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    global.fetch = mockFetch;
+
+    const result = await webSearchTool.execute('test-1', { query: 'test' });
+
+    const text = result.content[0].text;
+    const parsed = JSON.parse(text);
+    expect(parsed.error).toContain('Network error');
+    expect(parsed.results).toEqual([]);
+  });
+
+  it('should handle non-Error thrown values', async () => {
+    process.env.BRAVE_SEARCH_API_KEY = 'test-api-key';
+
+    const mockFetch = vi.fn().mockRejectedValue('Unknown error string');
+    global.fetch = mockFetch;
+
+    const result = await webSearchTool.execute('test-1', { query: 'test' });
+
+    const text = result.content[0].text;
+    const parsed = JSON.parse(text);
+    expect(parsed.error).toContain('Unknown error string');
+    expect(parsed.results).toEqual([]);
+  });
 });
