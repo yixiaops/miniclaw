@@ -25,6 +25,8 @@ export interface SubagentInfo {
   agentId: string;
   /** 会话 Key */
   sessionKey: string;
+  /** 父 Agent ID（用于权限检查） */
+  parentAgentId?: string;
   /** 任务描述 */
   task: string;
   /** 当前状态 */
@@ -55,6 +57,8 @@ export interface SpawnOptions {
   task: string;
   /** Agent 类型 ID，默认 'main' */
   agentId?: string;
+  /** 父 Agent ID（用于权限检查） */
+  parentAgentId?: string;
   /** 超时时间（毫秒），默认 60000 */
   timeout?: number;
   /** 技能列表 */
@@ -119,6 +123,8 @@ export interface SessionsSpawnParams {
   task: string;
   /** Agent 类型 */
   agentId?: string;
+  /** 父 Agent ID（用于权限检查） */
+  parentAgentId?: string;
   /** 超时时间（秒） */
   timeout?: number;
   /** 技能列表 */
