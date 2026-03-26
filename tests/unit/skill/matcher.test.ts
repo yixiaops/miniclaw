@@ -163,4 +163,71 @@ describe('SkillMatcher', () => {
       expect(['气温', '天气']).toContain(result?.matchedKeyword);
     });
   });
+
+  describe('sorting by match type and priority', () => {
+    it('should sort description matches after trigger matches', () => {
+      // 创建一个触发词匹配和一个描述匹配的技能
+      const triggerSkill: Skill = {
+        name: 'trigger-match',
+        description: '触发词匹配的技能。触发词：天气',
+        triggers: ['天气'],
+        content: '',
+        path: '',
+        priority: 1  // 低优先级
+      };
+      
+      // 这个技能通过描述中的关键词匹配
+      const descSkill: Skill = {
+        name: 'desc-match',
+        description: '这是一个forecast预报相关的技能',
+        triggers: [],  // 没有触发词，只能通过描述关键词匹配
+        content: '',
+        path: '',
+        priority: 100  // 高优先级
+      };
+      
+      const results = matcher.findAllMatches([triggerSkill, descSkill], '今天天气怎么样');
+      
+      // 应该至少有触发词匹配
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      
+      // 触发词匹配应该在第一位
+      expect(results[0].matchType).toBe('trigger');
+      expect(results[0].skill.name).toBe('trigger-match');
+      
+      // 如果有描述匹配，应该排在触发词匹配后面
+      if (results.length > 1 && results[1].matchType === 'description') {
+        expect(results[1].skill.name).toBe('desc-match');
+      }
+    });
+
+    it('should sort same match type by priority', () => {
+      // 创建两个都是触发词匹配的技能，测试优先级排序
+      const highPriority: Skill = {
+        name: 'high-priority',
+        description: '测试技能。触发词：test',
+        triggers: ['test'],
+        content: '',
+        path: '',
+        priority: 100
+      };
+      
+      const lowPriority: Skill = {
+        name: 'low-priority',
+        description: '测试技能。触发词：test',
+        triggers: ['test'],
+        content: '',
+        path: '',
+        priority: 1
+      };
+      
+      // 低优先级在前，但排序后高优先级应该排第一
+      const results = matcher.findAllMatches([lowPriority, highPriority], 'test');
+      
+      expect(results[0].skill.name).toBe('high-priority');
+      expect(results[0].skill.priority).toBe(100);
+      expect(results[1].skill.name).toBe('low-priority');
+      expect(results[1].skill.priority).toBe(1);
+    });
+  });
 });

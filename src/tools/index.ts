@@ -8,9 +8,8 @@ import { shellTool } from './shell.js';
 import { webFetchTool } from './web-fetch.js';
 import { memorySearchTool } from './memory-search.js';
 import { memoryGetTool } from './memory-get.js';
-import { webSearchTool } from './web-search.js';
 
-export { readFileTool, writeFileTool, shellTool, webFetchTool, memorySearchTool, memoryGetTool, webSearchTool };
+export { readFileTool, writeFileTool, shellTool, webFetchTool, memorySearchTool, memoryGetTool };
 
 /**
  * 获取所有内置工具列表
@@ -22,7 +21,6 @@ export function getBuiltinTools() {
     shellTool,
     webFetchTool,
     memorySearchTool,
-    memoryGetTool,
-    webSearchTool
+    memoryGetTool
   ];
 }

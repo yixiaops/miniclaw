@@ -253,4 +253,49 @@ describe('SubagentManager', () => {
       expect(manager.getAll().length).toBe(0);
     });
   });
+
+  describe('stopCleanup', () => {
+    it('should stop cleanup timer', async () => {
+      // 创建一个有清理定时器的 manager
+      const managerWithCleanup = createSubagentManager({
+        cleanupInterval: 100
+      });
+      
+      await managerWithCleanup.spawn({ task: 'Test' });
+      
+      // 停止清理
+      managerWithCleanup.stopCleanup();
+      
+      // 标记为完成
+      const all = managerWithCleanup.getAll();
+      managerWithCleanup.complete(all[0].id, 'Done');
+      
+      // 等待超过清理间隔
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // 子代理应该还在，因为清理已停止
+      expect(managerWithCleanup.getAll().length).toBe(1);
+      
+      managerWithCleanup.destroy();
+    });
+  });
+
+  describe('await with subagent deletion', () => {
+    it('should handle subagent deleted during await', async () => {
+      const id = await manager.spawn({ task: 'Test' });
+      manager.startExecution(id);
+      
+      // 在 await 之前删除 subagent
+      manager.destroy();
+      
+      // 重新创建 manager，之前的 subagent 不存在了
+      const newManager = createSubagentManager();
+      const result = await newManager.await(id);
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Subagent not found');
+      
+      newManager.destroy();
+    });
+  });
 });

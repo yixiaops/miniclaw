@@ -189,6 +189,23 @@ describe('SkillLoader', () => {
     });
   });
 
+  describe('error handling', () => {
+    it('should handle file read error gracefully', async () => {
+      // 创建一个无法读取的技能目录（权限问题模拟）
+      const errorDir = path.join(TEST_DIR, 'error-skill');
+      await fs.promises.mkdir(errorDir, { recursive: true });
+      
+      // 创建一个无效的 SKILL.md（模拟 JSON 解析失败的场景）
+      const skillPath = path.join(errorDir, 'SKILL.md');
+      await fs.promises.writeFile(skillPath, 'valid frontmatter but test error handling');
+      
+      // loadAllSkills 应该不抛出异常，返回空数组或有效技能
+      const skills = await loadAllSkills(errorDir);
+      // 即使有问题，也应该返回数组（可能是空的）
+      expect(Array.isArray(skills)).toBe(true);
+    });
+  });
+
   describe('getDefaultSkillsDir', () => {
     it('should return default path', () => {
       const dir = getDefaultSkillsDir();

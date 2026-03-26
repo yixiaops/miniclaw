@@ -196,4 +196,15 @@ describe('SubagentTools', () => {
       expect(formatted).toContain('Error: Something went wrong');
     });
   });
+
+  describe('subagents tool - unknown action', () => {
+    it('should return error for unknown action', async () => {
+      const result = await subagentsTool.execute('test', {
+        action: 'unknown' as any
+      });
+
+      expect(result.action).toBe('unknown');
+      expect(result.data).toContain('Unknown action');
+    });
+  });
 });
