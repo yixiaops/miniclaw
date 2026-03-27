@@ -2,12 +2,13 @@
  * @fileoverview Agent 运行时注册表
  *
  * 管理 Agent 实例的生命周期，包括创建、获取、销毁和清理空闲 Agent。
+ * 支持多 Agent 类型配置和子代理权限检查。
  *
  * @module core/agent/registry
  */
 
 import type { MiniclawAgent } from './index.js';
-import type { Config } from '../config.js';
+import type { Config, AgentConfig, AgentsDefaults } from '../config.js';
 
 /**
  * Agent 注册表项
@@ -15,6 +16,8 @@ import type { Config } from '../config.js';
 interface AgentEntry {
   /** Agent 实例 */
   agent: MiniclawAgent;
+  /** Agent 类型 ID */
+  agentId: string;
   /** 最后访问时间 */
   lastAccessedAt: number;
 }
@@ -22,20 +25,33 @@ interface AgentEntry {
 /**
  * 创建 Agent 的工厂函数类型
  */
-export type CreateAgentFn = (sessionKey: string, config: Config) => MiniclawAgent;
+export type CreateAgentFn = (
+  sessionKey: string,
+  config: Config,
+  agentId: string,
+  agentConfig?: AgentConfig
+) => MiniclawAgent;
 
 /**
  * Agent 运行时注册表
  *
  * 管理所有活跃的 Agent 实例，提供：
+ * - Agent 配置加载和管理
  * - Agent 的创建和复用
  * - Agent 的销毁
  * - 空闲 Agent 的清理
+ * - 子代理权限检查
  * - 数量限制
  */
 export class AgentRegistry {
-  /** Agent 存储 */
+  /** Agent 实例存储 */
   private agents: Map<string, AgentEntry> = new Map();
+
+  /** Agent 配置存储 */
+  private configs: Map<string, AgentConfig> = new Map();
+
+  /** 默认配置 */
+  private defaults: AgentsDefaults | null = null;
 
   /** 配置对象 */
   private config: Config;
@@ -59,6 +75,92 @@ export class AgentRegistry {
     if (maxAgents !== undefined) {
       this.maxAgents = maxAgents;
     }
+
+    // 自动加载配置（如果有）
+    if (config.agents) {
+      this.loadConfigs(config.agents.list, config.agents.defaults);
+    }
+  }
+
+  /**
+   * 加载 Agent 配置列表
+   *
+   * @param configs - Agent 配置列表
+   * @param defaults - 默认配置
+   */
+  loadConfigs(configs: AgentConfig[], defaults: AgentsDefaults): void {
+    this.defaults = defaults;
+    this.configs.clear();
+
+    for (const agentConfig of configs) {
+      this.configs.set(agentConfig.id, agentConfig);
+    }
+
+    // 更新最大 Agent 数量
+    if (defaults.maxConcurrent) {
+      this.maxAgents = defaults.maxConcurrent;
+    }
+  }
+
+  /**
+   * 获取 Agent 配置
+   *
+   * @param agentId - Agent 类型 ID
+   * @returns Agent 配置，如果不存在则返回 undefined
+   */
+  getConfig(agentId: string): AgentConfig | undefined {
+    return this.configs.get(agentId);
+  }
+
+  /**
+   * 获取所有 Agent 类型 ID
+   *
+   * @returns Agent 类型 ID 数组
+   */
+  getAgentTypes(): string[] {
+    return Array.from(this.configs.keys());
+  }
+
+  /**
+   * 检查父 Agent 是否允许创建指定类型的子代理
+   *
+   * @param parentAgentId - 父 Agent 类型 ID
+   * @param childAgentId - 子代理类型 ID
+   * @returns 是否允许
+   */
+  canSpawnSubagent(parentAgentId: string, childAgentId: string): boolean {
+    // 获取父 Agent 配置
+    const parentConfig = this.configs.get(parentAgentId);
+    if (!parentConfig) {
+      // 如果父 Agent 没有配置，检查默认行为
+      // 默认不允许创建子代理
+      return false;
+    }
+
+    // 检查 allowAgents 列表
+    const allowAgents = parentConfig.subagents?.allowAgents;
+    if (!allowAgents) {
+      // 未配置 allowAgents，不允许创建子代理
+      return false;
+    }
+
+    // 检查子代理类型是否在允许列表中
+    return allowAgents.includes(childAgentId);
+  }
+
+  /**
+   * 获取 Agent 允许创建的最大子代理并发数
+   *
+   * @param agentId - Agent 类型 ID
+   * @returns 最大并发数
+   */
+  getMaxSubagentConcurrent(agentId: string): number {
+    const agentConfig = this.configs.get(agentId);
+    if (agentConfig?.subagents?.maxConcurrent) {
+      return agentConfig.subagents.maxConcurrent;
+    }
+    // 使用默认值
+    return this.defaults?.subagents?.maxConcurrent ?? 5;
   }
 
   /**
@@ -68,12 +170,15 @@ export class AgentRegistry {
    * 如果不存在，则创建新的 Agent 实例。
    *
    * @param sessionKey - Session Key
+   * @param agentId - Agent 类型 ID（可选，默认 'main'）
    * @returns Agent 实例
    * @throws 当达到最大 Agent 数量时抛出错误
    */
-  getOrCreate(sessionKey: string): MiniclawAgent {
-    const existing = this.agents.get(sessionKey);
+  getOrCreate(sessionKey: string, agentId?: string): MiniclawAgent {
+    const targetAgentId = agentId || 'main';
 
+    // 检查是否已存在
+    const existing = this.agents.get(sessionKey);
     if (existing) {
       // 更新最后访问时间
       existing.lastAccessedAt = Date.now();
@@ -82,13 +187,17 @@ export class AgentRegistry {
 
     // 检查是否达到最大数量
     if (this.agents.size >= this.maxAgents) {
-      throw new Error('Maximum number of agents reached');
+      throw new Error(`Maximum number of agents reached (${this.maxAgents})`);
     }
 
+    // 获取 Agent 配置
+    const agentConfig = this.configs.get(targetAgentId);
+
     // 创建新 Agent
-    const agent = this.createAgentFn(sessionKey, this.config);
+    const agent = this.createAgentFn(sessionKey, this.config, targetAgentId, agentConfig);
     this.agents.set(sessionKey, {
       agent,
+      agentId: targetAgentId,
       lastAccessedAt: Date.now()
     });
 
@@ -108,6 +217,17 @@ export class AgentRegistry {
       return entry.agent;
     }
     return undefined;
+  }
+
+  /**
+   * 获取 Agent 的类型 ID
+   *
+   * @param sessionKey - Session Key
+   * @returns Agent 类型 ID，如果不存在则返回 undefined
+   */
+  getAgentId(sessionKey: string): string | undefined {
+    const entry = this.agents.get(sessionKey);
+    return entry?.agentId;
   }
 
   /**

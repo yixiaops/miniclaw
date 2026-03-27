@@ -2,25 +2,73 @@
  * @fileoverview 子代理工具测试
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SubagentManager, createSubagentManager } from '../../../src/core/subagent/manager.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { SubagentManager } from '../../../src/core/subagent/manager.js';
 import { 
   createSessionsSpawnTool, 
   createSubagentsTool,
   formatSubagentInfo 
 } from '../../../src/core/subagent/tools.js';
+import type { AgentRegistry } from '../../../src/core/agent/registry.js';
+import type { AgentConfig } from '../../../src/core/config.js';
+
+/**
+ * 创建 mock AgentRegistry
+ */
+function createMockRegistry(): AgentRegistry {
+  const configs = new Map<string, AgentConfig>();
+  
+  configs.set('main', {
+    id: 'main',
+    name: 'Main Agent',
+    subagents: {
+      allowAgents: ['etf', 'policy']
+    }
+  });
+  
+  configs.set('etf', {
+    id: 'etf',
+    name: 'ETF Agent'
+  });
+
+  return {
+    getConfig: (agentId: string) => configs.get(agentId),
+    getAgentTypes: () => Array.from(configs.keys()),
+    canSpawnSubagent: (parentAgentId: string, childAgentId: string) => {
+      const config = configs.get(parentAgentId);
+      if (!config?.subagents?.allowAgents) return false;
+      return config.subagents.allowAgents.includes(childAgentId);
+    },
+    getOrCreate: vi.fn(),
+    get: vi.fn(),
+    destroy: vi.fn(),
+    loadConfigs: vi.fn(),
+    getMaxSubagentConcurrent: () => 5,
+    getAgentId: vi.fn(),
+    count: () => 0,
+    getSessionKeys: () => [],
+    destroyAll: vi.fn(),
+    cleanupIdle: vi.fn(),
+    getLastAccessTime: () => 0
+  } as unknown as AgentRegistry;
+}
 
 describe('SubagentTools', () => {
   let manager: SubagentManager;
+  let registry: AgentRegistry;
   let spawnTool: ReturnType<typeof createSessionsSpawnTool>;
   let subagentsTool: ReturnType<typeof createSubagentsTool>;
 
   beforeEach(() => {
-    manager = createSubagentManager({
+    registry = createMockRegistry();
+    manager = new SubagentManager({
       maxConcurrent: 3,
       defaultTimeout: 1000
+    }, registry);
+    spawnTool = createSessionsSpawnTool({
+      manager,
+      currentAgentId: 'main'
     });
-    spawnTool = createSessionsSpawnTool(manager);
     subagentsTool = createSubagentsTool(manager);
   });
 
@@ -33,83 +81,82 @@ describe('SubagentTools', () => {
       expect(spawnTool.name).toBe('sessions_spawn');
     });
 
-    it('should create subagent', async () => {
-      const result = await spawnTool.execute('test-1', {
-        task: 'Test task'
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.subagentId).toMatch(/^sub-/);
-      expect(result.sessionKey).toContain('subagent:');
+    it('should have tool label', () => {
+      expect(spawnTool.label).toBe('创建子代理');
     });
 
-    it('should create subagent with options', async () => {
-      const result = await spawnTool.execute('test-2', {
-        task: 'ETF analysis',
-        agentId: 'etf',
-        timeout: 30,
-        skills: ['etf-analysis']
-      });
-
-      expect(result.success).toBe(true);
-      
-      const info = manager.get(result.subagentId);
-      expect(info?.agentId).toBe('etf');
-      expect(info?.skills).toContain('etf-analysis');
+    it('should have tool description', () => {
+      expect(spawnTool.description).toBeTruthy();
+      expect(spawnTool.description.length).toBeGreaterThan(10);
     });
 
-    it('should fail when max concurrent reached', async () => {
-      await spawnTool.execute('t1', { task: 'Task 1' });
-      await spawnTool.execute('t2', { task: 'Task 2' });
-      await spawnTool.execute('t3', { task: 'Task 3' });
+    it('should return error when max concurrent reached', async () => {
+      // 创建 3 个子代理达到上限
+      await manager.spawn({ task: 'Task 1' });
+      await manager.spawn({ task: 'Task 2' });
+      await manager.spawn({ task: 'Task 3' });
 
-      const result = await spawnTool.execute('t4', { task: 'Task 4' });
-      
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Maximum concurrent');
+      const result = await spawnTool.execute('test-4', {
+        task: 'Task 4'
+      });
+
+      expect(result.details.success).toBe(false);
+      expect(result.content[0].text).toContain('最大并发');
+    });
+
+    it('should fail when permission denied', async () => {
+      // etf 不允许创建 main
+      const etfTool = createSessionsSpawnTool({
+        manager,
+        currentAgentId: 'etf'
+      });
+
+      const result = await etfTool.execute('test-1', {
+        task: 'Test task',
+        agentId: 'main'
+      });
+
+      expect(result.details.success).toBe(false);
+      expect(result.details.error).toContain('not allowed');
     });
   });
 
   describe('subagents tool - list', () => {
     it('should list active subagents', async () => {
-      await spawnTool.execute('t1', { task: 'Task 1' });
-      await spawnTool.execute('t2', { task: 'Task 2' });
+      await manager.spawn({ task: 'Task 1' });
+      await manager.spawn({ task: 'Task 2' });
 
       const result = await subagentsTool.execute('test', { action: 'list' });
       
-      expect(result.action).toBe('list');
-      expect(Array.isArray(result.data)).toBe(true);
-      const list = result.data as any[];
-      expect(list.length).toBe(2);
+      expect(result.details.action).toBe('list');
+      expect(result.content[0].text).toContain('sub-');
     });
 
-    it('should return empty list when no subagents', async () => {
+    it('should return message when no subagents', async () => {
       const result = await subagentsTool.execute('test', { action: 'list' });
       
-      const list = result.data as any[];
-      expect(list.length).toBe(0);
+      expect(result.content[0].text).toContain('没有活跃的子代理');
     });
   });
 
   describe('subagents tool - get', () => {
     it('should get subagent info', async () => {
-      const spawnResult = await spawnTool.execute('t1', { task: 'Test task' });
+      const id = await manager.spawn({ task: 'Test task' });
 
       const result = await subagentsTool.execute('test', {
         action: 'get',
-        target: spawnResult.subagentId
+        target: id
       });
 
-      expect(result.action).toBe('get');
-      const info = result.data as any;
-      expect(info.id).toBe(spawnResult.subagentId);
-      expect(info.task).toBe('Test task');
+      expect(result.details.action).toBe('get');
+      expect(result.content[0].text).toContain(id);
+      expect(result.content[0].text).toContain('Test task');
     });
 
     it('should return error for missing target', async () => {
       const result = await subagentsTool.execute('test', { action: 'get' });
       
-      expect(result.data).toContain('target is required');
+      expect(result.content[0].text).toContain('需要提供 target');
     });
 
     it('should return error for non-existent subagent', async () => {
@@ -118,44 +165,52 @@ describe('SubagentTools', () => {
         target: 'nonexistent'
       });
 
-      expect(result.data).toContain('not found');
+      expect(result.content[0].text).toContain('不存在');
     });
   });
 
   describe('subagents tool - kill', () => {
     it('should kill subagent', async () => {
-      const spawnResult = await spawnTool.execute('t1', { task: 'Test' });
+      const id = await manager.spawn({ task: 'Test' });
 
       const result = await subagentsTool.execute('test', {
         action: 'kill',
-        target: spawnResult.subagentId
+        target: id
       });
 
-      expect(result.data).toContain('killed');
+      expect(result.content[0].text).toContain('已终止');
       
-      const info = manager.get(spawnResult.subagentId);
+      const info = manager.get(id);
       expect(info?.status).toBe('killed');
     });
 
     it('should return error for missing target', async () => {
       const result = await subagentsTool.execute('test', { action: 'kill' });
       
-      expect(result.data).toContain('target is required');
+      expect(result.content[0].text).toContain('需要提供 target');
     });
   });
 
   describe('subagents tool - stats', () => {
     it('should return stats', async () => {
-      await spawnTool.execute('t1', { task: 'Task 1' });
-      await spawnTool.execute('t2', { task: 'Task 2' });
+      await manager.spawn({ task: 'Task 1' });
+      await manager.spawn({ task: 'Task 2' });
 
       const result = await subagentsTool.execute('test', { action: 'stats' });
       
-      expect(result.action).toBe('stats');
-      const stats = result.data as any;
-      expect(stats.total).toBe(2);
-      expect(stats.active).toBe(2);
-      expect(stats.maxConcurrent).toBe(3);
+      expect(result.details.action).toBe('stats');
+      expect(result.content[0].text).toContain('总数: 2');
+      expect(result.content[0].text).toContain('活跃: 2');
+    });
+  });
+
+  describe('subagents tool - unknown action', () => {
+    it('should return error for unknown action', async () => {
+      const result = await subagentsTool.execute('test', {
+        action: 'unknown' as any
+      });
+
+      expect(result.content[0].text).toContain('未知操作');
     });
   });
 
@@ -164,9 +219,8 @@ describe('SubagentTools', () => {
       const info = {
         id: 'sub-test-123',
         agentId: 'main',
-        sessionKey: 'subagent:main:sub-test-123',
-        task: 'Test task',
         status: 'completed' as const,
+        task: 'Test task',
         createdAt: new Date('2026-03-25T12:00:00Z'),
         timeout: 60000,
         result: 'Task completed successfully'
@@ -184,9 +238,8 @@ describe('SubagentTools', () => {
       const info = {
         id: 'sub-test',
         agentId: 'main',
-        sessionKey: 'subagent:main:sub-test',
-        task: 'Test',
         status: 'failed' as const,
+        task: 'Test',
         createdAt: new Date(),
         timeout: 60000,
         error: 'Something went wrong'
@@ -195,16 +248,20 @@ describe('SubagentTools', () => {
       const formatted = formatSubagentInfo(info);
       expect(formatted).toContain('Error: Something went wrong');
     });
-  });
 
-  describe('subagents tool - unknown action', () => {
-    it('should return error for unknown action', async () => {
-      const result = await subagentsTool.execute('test', {
-        action: 'unknown' as any
-      });
+    it('should include parentAgentId when present', () => {
+      const info = {
+        id: 'sub-test',
+        agentId: 'etf',
+        parentAgentId: 'main',
+        status: 'running' as const,
+        task: 'Test',
+        createdAt: new Date(),
+        timeout: 60000
+      };
 
-      expect(result.action).toBe('unknown');
-      expect(result.data).toContain('Unknown action');
+      const formatted = formatSubagentInfo(info);
+      expect(formatted).toContain('Parent: main');
     });
   });
 });

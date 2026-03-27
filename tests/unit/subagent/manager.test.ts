@@ -2,17 +2,68 @@
  * @fileoverview 子代理管理器测试
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SubagentManager, createSubagentManager } from '../../../src/core/subagent/manager.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { SubagentManager } from '../../../src/core/subagent/manager.js';
+import type { AgentRegistry } from '../../../src/core/agent/registry.js';
+import type { AgentConfig } from '../../../src/core/config.js';
+
+/**
+ * 创建 mock AgentRegistry
+ */
+function createMockRegistry(): AgentRegistry {
+  const configs = new Map<string, AgentConfig>();
+  
+  // 默认配置 main 允许创建 etf 和 policy
+  configs.set('main', {
+    id: 'main',
+    name: 'Main Agent',
+    subagents: {
+      allowAgents: ['etf', 'policy']
+    }
+  });
+  
+  configs.set('etf', {
+    id: 'etf',
+    name: 'ETF Agent'
+  });
+  
+  configs.set('policy', {
+    id: 'policy',
+    name: 'Policy Agent'
+  });
+
+  return {
+    getConfig: (agentId: string) => configs.get(agentId),
+    getAgentTypes: () => Array.from(configs.keys()),
+    canSpawnSubagent: (parentAgentId: string, childAgentId: string) => {
+      const config = configs.get(parentAgentId);
+      if (!config?.subagents?.allowAgents) return false;
+      return config.subagents.allowAgents.includes(childAgentId);
+    },
+    getOrCreate: vi.fn(),
+    get: vi.fn(),
+    destroy: vi.fn(),
+    loadConfigs: vi.fn(),
+    getMaxSubagentConcurrent: () => 5,
+    getAgentId: vi.fn(),
+    count: () => 0,
+    getSessionKeys: () => [],
+    destroyAll: vi.fn(),
+    cleanupIdle: vi.fn(),
+    getLastAccessTime: () => 0
+  } as unknown as AgentRegistry;
+}
 
 describe('SubagentManager', () => {
   let manager: SubagentManager;
+  let registry: AgentRegistry;
 
   beforeEach(() => {
-    manager = createSubagentManager({
+    registry = createMockRegistry();
+    manager = new SubagentManager({
       maxConcurrent: 3,
       defaultTimeout: 1000
-    });
+    }, registry);
   });
 
   afterEach(() => {
@@ -61,6 +112,26 @@ describe('SubagentManager', () => {
       await expect(manager.spawn({ task: 'Task 4' })).rejects.toThrow(
         'Maximum concurrent subagents reached'
       );
+    });
+
+    it('should throw when permission denied', async () => {
+      // etf 没有配置 allowAgents，不允许创建子代理
+      await expect(manager.spawn({ 
+        task: 'Test task', 
+        agentId: 'main',
+        parentAgentId: 'etf'
+      })).rejects.toThrow('not allowed to spawn subagent');
+    });
+
+    it('should allow spawn when permission granted', async () => {
+      // main 允许创建 etf
+      const id = await manager.spawn({ 
+        task: 'Test task', 
+        agentId: 'etf',
+        parentAgentId: 'main'
+      });
+      
+      expect(id).toBeDefined();
     });
   });
 
@@ -257,9 +328,10 @@ describe('SubagentManager', () => {
   describe('stopCleanup', () => {
     it('should stop cleanup timer', async () => {
       // 创建一个有清理定时器的 manager
-      const managerWithCleanup = createSubagentManager({
+      const newRegistry = createMockRegistry();
+      const managerWithCleanup = new SubagentManager({
         cleanupInterval: 100
-      });
+      }, newRegistry);
       
       await managerWithCleanup.spawn({ task: 'Test' });
       
@@ -289,7 +361,8 @@ describe('SubagentManager', () => {
       manager.destroy();
       
       // 重新创建 manager，之前的 subagent 不存在了
-      const newManager = createSubagentManager();
+      const newRegistry = createMockRegistry();
+      const newManager = new SubagentManager({}, newRegistry);
       const result = await newManager.await(id);
       
       expect(result.success).toBe(false);

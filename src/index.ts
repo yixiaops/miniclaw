@@ -4,8 +4,11 @@
  */
 import 'dotenv/config';
 import { MiniclawAgent } from './core/agent/index.js';
+import { AgentRegistry } from './core/agent/registry.js';
 import { MiniclawGateway } from './core/gateway/index.js';
-import { loadConfig } from './core/config.js';
+import { loadConfig, type Config, type AgentConfig } from './core/config.js';
+import { SubagentManager } from './core/subagent/manager.js';
+import { createSessionsSpawnTool, createSubagentsTool } from './core/subagent/tools.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
@@ -13,18 +16,67 @@ import { getBuiltinTools } from './tools/index.js';
 
 /**
  * 创建 Agent 的工厂函数
+ *
+ * @param registry - Agent 注册表
+ * @param subagentManager - 子代理管理器
  */
-function createAgentFactory() {
-  return (sessionKey: string, config: ReturnType<typeof loadConfig>) => {
-    console.log(`[Gateway] 创建新 Agent: ${sessionKey}`);
-    const agent = new MiniclawAgent(config);
+function createAgentFactory(
+  _registry: AgentRegistry,
+  subagentManager: SubagentManager
+) {
+  return (
+    sessionKey: string,
+    config: Config,
+    agentId: string,
+    agentConfig?: AgentConfig
+  ) => {
+    console.log(`[Gateway] 创建新 Agent: ${sessionKey} (type: ${agentId})`);
+
+    // 创建 Agent
+    const agent = new MiniclawAgent(config, {
+      systemPrompt: agentConfig?.systemPrompt,
+      tools: [] // 先不传工具，后面单独注册
+    });
+
+    // 如果指定了模型，切换模型
+    if (agentConfig?.model && agentConfig.model !== config.bailian.model) {
+      agent.setModel(agentConfig.model);
+    }
 
     // 注册内置工具
-    const tools = getBuiltinTools();
-    tools.forEach((tool: any) => agent.registerTool(tool as any));
+    const builtinTools = getBuiltinTools();
+    builtinTools.forEach((tool: any) => agent.registerTool(tool as any));
+
+    // 注册子代理工具
+    // 所有 Agent 都可以创建子代理（权限由 SubagentManager 检查）
+    agent.registerTool(createSessionsSpawnTool({
+      manager: subagentManager,
+      currentAgentId: agentId
+    }) as any);
+    agent.registerTool(createSubagentsTool(subagentManager) as any);
 
     return agent;
   };
+}
+
+/**
+ * 打印 Agent 配置信息
+ */
+function printAgentInfo(registry: AgentRegistry) {
+  const types = registry.getAgentTypes();
+  if (types.length === 0) {
+    console.log('Agent 类型: 默认 (main)');
+    return;
+  }
+
+  console.log(`Agent 类型: ${types.join(', ')}`);
+  types.forEach(id => {
+    const config = registry.getConfig(id);
+    if (config) {
+      const allowAgents = config.subagents?.allowAgents || [];
+      console.log(`  - ${id}: ${config.name || id}${allowAgents.length > 0 ? ` (可创建: ${allowAgents.join(', ')})` : ''}`);
+    }
+  });
 }
 
 /**
@@ -38,12 +90,41 @@ async function main() {
   console.log(`模型: ${config.bailian.model}`);
   console.log(`API: ${config.bailian.baseUrl}`);
 
-  // 创建 Gateway
-  const gateway = new MiniclawGateway(config, {
-    createAgentFn: createAgentFactory()
+  // 创建 AgentRegistry
+  const registry = new AgentRegistry(config, () => {
+    // 临时空函数，后面会更新
+    throw new Error('Agent factory not initialized');
   });
 
-  console.log(`已加载 ${getBuiltinTools().length} 个工具`);
+  // 加载 Agent 配置（如果有）
+  if (config.agents) {
+    registry.loadConfigs(config.agents.list, config.agents.defaults);
+    console.log(`已加载 ${config.agents.list.length} 个 Agent 配置`);
+  }
+
+  // 创建 SubagentManager
+  const subagentConfig = config.agents?.defaults.subagents || {
+    maxConcurrent: 5,
+    defaultTimeout: 60000
+  };
+  const subagentManager = new SubagentManager(subagentConfig, registry);
+
+  // 创建 Agent 工厂函数
+  const createAgentFn = createAgentFactory(registry, subagentManager);
+
+  // 更新 Registry 的创建函数（使用任意键设置私有属性）
+  (registry as any).createAgentFn = createAgentFn;
+
+  // 创建 Gateway
+  const gateway = new MiniclawGateway(config, {
+    createAgentFn,
+    maxAgents: config.agents?.defaults.maxConcurrent
+  });
+
+  // 打印工具和 Agent 信息
+  console.log(`已加载 ${getBuiltinTools().length} 个内置工具`);
+  console.log(`已加载子代理工具: sessions_spawn, subagents`);
+  printAgentInfo(registry);
 
   // 解析命令行参数
   const args = process.argv.slice(2);
@@ -68,6 +149,7 @@ async function main() {
         console.log('\n正在关闭...');
         await api.stop();
         gateway.cleanup();
+        subagentManager.destroy();
         process.exit(0);
       });
       break;
@@ -86,6 +168,7 @@ async function main() {
         console.log('\n正在关闭...');
         feishu.stop();
         gateway.cleanup();
+        subagentManager.destroy();
         process.exit(0);
       });
       break;
@@ -105,6 +188,7 @@ async function main() {
         console.log('\n正在关闭...');
         await apiChannel.stop();
         gateway.cleanup();
+        subagentManager.destroy();
         process.exit(0);
       });
       break;
@@ -119,6 +203,7 @@ async function main() {
         console.log('\n正在关闭...');
         await webChannel.stop();
         gateway.cleanup();
+        subagentManager.destroy();
         process.exit(0);
       });
       break;

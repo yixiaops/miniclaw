@@ -42,6 +42,61 @@ export interface FeishuConfig {
 }
 
 /**
+ * Agent 配置
+ */
+export interface AgentConfig {
+  /** Agent 唯一标识 */
+  id: string;
+  /** 显示名称 */
+  name?: string;
+  /** 使用的模型（覆盖默认） */
+  model?: string;
+  /** 系统提示词 */
+  systemPrompt?: string;
+  /** 工作目录 */
+  workspace?: string;
+  /** 子代理配置 */
+  subagents?: {
+    /** 允许创建的子代理类型 */
+    allowAgents?: string[];
+    /** 最大并发子代理数 */
+    maxConcurrent?: number;
+  };
+  /** 工具配置 */
+  tools?: {
+    /** 允许的工具 */
+    allow?: string[];
+    /** 禁止的工具 */
+    deny?: string[];
+  };
+}
+
+/**
+ * Agents 默认配置
+ */
+export interface AgentsDefaults {
+  /** 默认模型 */
+  model: string;
+  /** 最大 Agent 数量 */
+  maxConcurrent: number;
+  /** 子代理默认配置 */
+  subagents: {
+    maxConcurrent: number;
+    defaultTimeout: number;
+  };
+}
+
+/**
+ * Agents 配置
+ */
+export interface AgentsConfig {
+  /** 默认配置 */
+  defaults: AgentsDefaults;
+  /** Agent 列表 */
+  list: AgentConfig[];
+}
+
+/**
  * 应用配置
  */
 export interface Config {
@@ -51,6 +106,8 @@ export interface Config {
   server: ServerConfig;
   /** 飞书配置（可选） */
   feishu?: FeishuConfig;
+  /** Agents 配置（可选） */
+  agents?: AgentsConfig;
 }
 
 /**

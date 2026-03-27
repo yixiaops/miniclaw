@@ -1,90 +1,182 @@
 /**
  * @fileoverview 子代理工具实现
- * 
- * 实现 sessions_spawn 和 subagents 工具
- * 
+ *
+ * 实现 sessions_spawn 和 subagents 工具。
+ * 集成 AgentRegistry 实现动态创建和执行子代理。
+ *
  * @module core/subagent/tools
  */
 
-import { Type } from '@sinclair/typebox';
-import type {
-  SessionsSpawnParams,
-  SessionsSpawnResult,
-  SubagentsParams,
-  SubagentsResult,
-  SubagentInfo
-} from './types.js';
+import { Type, type Static } from '@sinclair/typebox';
 import type { SubagentManager } from './manager.js';
+
+// ============================================================================
+// 类型定义
+// ============================================================================
+
+/**
+ * sessions_spawn 工具参数 schema
+ */
+const SessionsSpawnParamsSchema = Type.Object({
+  task: Type.String({
+    description: '任务描述，清晰说明子代理需要完成什么'
+  }),
+  agentId: Type.Optional(Type.String({
+    description: '指定 Agent 类型，如 etf、policy。不填则使用默认 Agent'
+  })),
+  parentAgentId: Type.Optional(Type.String({
+    description: '父 Agent ID（用于权限检查，通常自动填充）'
+  })),
+  timeout: Type.Optional(Type.Number({
+    description: '超时时间（秒），默认 60'
+  })),
+  skills: Type.Optional(Type.Array(Type.String())),
+  model: Type.Optional(Type.String({
+    description: '指定模型'
+  }))
+});
+
+type SessionsSpawnParams = Static<typeof SessionsSpawnParamsSchema>;
+
+/**
+ * sessions_spawn 工具详情
+ */
+export interface SessionsSpawnDetails {
+  subagentId: string;
+  sessionKey: string;
+  success: boolean;
+  result?: string;
+  error?: string;
+}
+
+/**
+ * subagents 工具参数 schema
+ */
+const SubagentsParamsSchema = Type.Object({
+  action: Type.Union([
+    Type.Literal('list'),
+    Type.Literal('get'),
+    Type.Literal('kill'),
+    Type.Literal('stats')
+  ], { description: '操作类型' }),
+  target: Type.Optional(Type.String({
+    description: '子代理 ID（get/kill 时必填）'
+  }))
+});
+
+type SubagentsParams = Static<typeof SubagentsParamsSchema>;
+
+/**
+ * subagents 工具详情
+ */
+export interface SubagentsDetails {
+  action: string;
+  data: unknown;
+}
+
+// ============================================================================
+// 工具实现
+// ============================================================================
+
+/**
+ * sessions_spawn 工具选项
+ */
+export interface SessionsSpawnToolOptions {
+  /** 子代理管理器 */
+  manager: SubagentManager;
+  /** 当前 Agent ID（用于权限检查） */
+  currentAgentId?: string;
+}
 
 /**
  * 创建 sessions_spawn 工具
+ *
+ * @param options - 工具选项
  */
-export function createSessionsSpawnTool(manager: SubagentManager) {
+export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
+  const { manager, currentAgentId = 'main' } = options;
+
   return {
     name: 'sessions_spawn',
-    description: '创建子代理执行任务。适用于：并行处理、专业任务委托。返回子代理 ID 和执行结果。',
-    parameters: Type.Object({
-      task: Type.String({ 
-        description: '任务描述，清晰说明子代理需要完成什么' 
-      }),
-      agentId: Type.Optional(Type.String({ 
-        description: '指定 Agent 类型，如 etf、policy。不填则使用默认 Agent' 
-      })),
-      timeout: Type.Optional(Type.Number({ 
-        description: '超时时间（秒），默认 60' 
-      })),
-      skills: Type.Optional(Type.Array(Type.String())),
-      model: Type.Optional(Type.String({ 
-        description: '指定模型' 
-      }))
-    }),
+    label: '创建子代理',
+    description: `创建子代理执行任务。适用于：并行处理、专业任务委托。
+
+参数：
+- task: 任务描述
+- agentId: 指定 Agent 类型（如 etf、policy）
+- timeout: 超时时间（秒）
+- skills: 技能列表
+- model: 指定模型
+
+返回子代理 ID 和执行结果。`,
+    parameters: SessionsSpawnParamsSchema,
 
     async execute(
       _toolCallId: string,
       params: SessionsSpawnParams
-    ): Promise<SessionsSpawnResult> {
+    ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: SessionsSpawnDetails }> {
       try {
         // 检查是否可以创建
         if (!manager.canSpawn()) {
           return {
-            subagentId: '',
-            sessionKey: '',
-            success: false,
-            error: 'Maximum concurrent subagents reached'
+            content: [{ type: 'text', text: '错误: 已达到最大并发子代理数' }],
+            details: {
+              subagentId: '',
+              sessionKey: '',
+              success: false,
+              error: 'Maximum concurrent subagents reached'
+            }
           };
         }
 
-        // 创建子代理
-        const subagentId = await manager.spawn({
+        // 确定父 Agent ID（优先使用参数，否则使用当前 Agent）
+        const parentAgent = params.parentAgentId || currentAgentId;
+
+        // 创建并执行子代理
+        const result = await manager.spawnAndExecute({
           task: params.task,
           agentId: params.agentId,
+          parentAgentId: parentAgent,
           timeout: params.timeout ? params.timeout * 1000 : undefined,
           skills: params.skills,
           model: params.model
         });
 
-        const info = manager.get(subagentId);
-        
-        // 标记开始执行
-        manager.startExecution(subagentId);
-        
-        // 注意：这里不自动完成，让调用者决定何时完成
-        // 实际实现应该调用 Agent 执行任务
-
-        return {
-          subagentId,
-          sessionKey: info?.sessionKey ?? '',
-          success: true,
-          result: `Subagent ${subagentId} created and started`
-        };
+        // 返回结果
+        if (result.success) {
+          const info = manager.get(result.subagentId);
+          return {
+            content: [{ type: 'text', text: result.data || '任务执行成功' }],
+            details: {
+              subagentId: result.subagentId,
+              sessionKey: info?.sessionKey ?? '',
+              success: true,
+              result: result.data
+            }
+          };
+        } else {
+          const info = manager.get(result.subagentId);
+          return {
+            content: [{ type: 'text', text: `错误: ${result.error}` }],
+            details: {
+              subagentId: result.subagentId,
+              sessionKey: info?.sessionKey ?? '',
+              success: false,
+              error: result.error
+            }
+          };
+        }
 
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
-          subagentId: '',
-          sessionKey: '',
-          success: false,
-          error: message
+          content: [{ type: 'text', text: `错误: ${message}` }],
+          details: {
+            subagentId: '',
+            sessionKey: '',
+            success: false,
+            error: message
+          }
         };
       }
     }
@@ -93,84 +185,89 @@ export function createSessionsSpawnTool(manager: SubagentManager) {
 
 /**
  * 创建 subagents 工具
+ *
+ * @param manager - 子代理管理器
  */
 export function createSubagentsTool(manager: SubagentManager) {
   return {
     name: 'subagents',
-    description: '管理子代理：列出、获取详情、终止、查看统计。',
-    parameters: Type.Object({
-      action: Type.Union([
-        Type.Literal('list'),
-        Type.Literal('get'),
-        Type.Literal('kill'),
-        Type.Literal('stats')
-      ], { description: '操作类型' }),
-      target: Type.Optional(Type.String({ 
-        description: '子代理 ID（get/kill 时必填）' 
-      }))
-    }),
+    label: '管理子代理',
+    description: `管理子代理：列出、获取详情、终止、查看统计。
+
+操作类型：
+- list: 列出活跃子代理
+- get: 获取子代理详情（需要 target）
+- kill: 终止子代理（需要 target）
+- stats: 查看统计信息`,
+    parameters: SubagentsParamsSchema,
 
     async execute(
       _toolCallId: string,
       params: SubagentsParams
-    ): Promise<SubagentsResult> {
+    ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: SubagentsDetails }> {
       switch (params.action) {
         case 'list': {
           const list = manager.getActive();
+          const text = list.length === 0
+            ? '当前没有活跃的子代理'
+            : list.map(info => `- ${info.id} (${info.agentId}): ${info.status}`).join('\n');
           return {
-            action: 'list',
-            data: list
+            content: [{ type: 'text', text }],
+            details: { action: 'list', data: list }
           };
         }
 
         case 'get': {
           if (!params.target) {
             return {
-              action: 'get',
-              data: 'Error: target is required for get action'
+              content: [{ type: 'text', text: '错误: get 操作需要提供 target 参数' }],
+              details: { action: 'get', data: 'Error: target is required' }
             };
           }
           const info = manager.get(params.target);
           if (!info) {
             return {
-              action: 'get',
-              data: `Subagent ${params.target} not found`
+              content: [{ type: 'text', text: `错误: 子代理 ${params.target} 不存在` }],
+              details: { action: 'get', data: `Subagent ${params.target} not found` }
             };
           }
+          const text = formatSubagentInfo(info);
           return {
-            action: 'get',
-            data: info
+            content: [{ type: 'text', text }],
+            details: { action: 'get', data: info }
           };
         }
 
         case 'kill': {
           if (!params.target) {
             return {
-              action: 'kill',
-              data: 'Error: target is required for kill action'
+              content: [{ type: 'text', text: '错误: kill 操作需要提供 target 参数' }],
+              details: { action: 'kill', data: 'Error: target is required' }
             };
           }
           const success = manager.kill(params.target);
+          const text = success
+            ? `已终止子代理: ${params.target}`
+            : `终止失败: 子代理 ${params.target} 状态不允许终止`;
           return {
-            action: 'kill',
-            data: success 
-              ? `Subagent ${params.target} killed` 
-              : `Failed to kill subagent ${params.target}`
+            content: [{ type: 'text', text }],
+            details: { action: 'kill', data: success }
           };
         }
 
         case 'stats': {
           const stats = manager.getStats();
+          const text = `子代理统计:\n- 总数: ${stats.total}\n- 活跃: ${stats.active}\n- 完成: ${stats.completed}\n- 失败: ${stats.failed}\n- 最大并发: ${stats.maxConcurrent}`;
           return {
-            action: 'stats',
-            data: stats
+            content: [{ type: 'text', text }],
+            details: { action: 'stats', data: stats }
           };
         }
 
         default:
           return {
-            action: params.action,
-            data: `Unknown action: ${params.action}`
+            content: [{ type: 'text', text: `错误: 未知操作 ${params.action}` }],
+            details: { action: params.action, data: `Unknown action: ${params.action}` }
           };
       }
     }
@@ -179,8 +276,19 @@ export function createSubagentsTool(manager: SubagentManager) {
 
 /**
  * 格式化子代理信息为字符串
+ *
+ * @param info - 子代理信息
  */
-export function formatSubagentInfo(info: SubagentInfo): string {
+export function formatSubagentInfo(info: {
+  id: string;
+  agentId: string;
+  status: string;
+  task: string;
+  createdAt: Date;
+  parentAgentId?: string;
+  result?: string;
+  error?: string;
+}): string {
   const lines = [
     `ID: ${info.id}`,
     `Agent: ${info.agentId}`,
@@ -189,8 +297,15 @@ export function formatSubagentInfo(info: SubagentInfo): string {
     `Created: ${info.createdAt.toISOString()}`
   ];
 
+  if (info.parentAgentId) {
+    lines.push(`Parent: ${info.parentAgentId}`);
+  }
+
   if (info.result) {
-    lines.push(`Result: ${info.result.slice(0, 100)}...`);
+    const preview = info.result.length > 100
+      ? info.result.slice(0, 100) + '...'
+      : info.result;
+    lines.push(`Result: ${preview}`);
   }
 
   if (info.error) {
