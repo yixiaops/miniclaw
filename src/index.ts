@@ -55,7 +55,8 @@ function createAgentFactory(
     agent.registerTool(createSessionsSpawnTool({
       manager: subagentManager,
       currentAgentId: agentId,
-      registry: _registry  // 传入 registry 以动态生成工具描述
+      registry: _registry,  // 传入 registry 以动态生成工具描述
+      isSubagent: isSubagent || false  // 传入身份信息用于日志
     }) as any);
     agent.registerTool(createSubagentsTool(subagentManager) as any);
 
