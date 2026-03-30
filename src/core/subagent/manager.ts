@@ -18,6 +18,22 @@ import type {
 import type { AgentRegistry } from '../agent/registry.js';
 
 /**
+ * 日志前缀
+ */
+const LOG_PREFIX = '[Subagent]';
+
+/**
+ * 打印分隔线
+ */
+function printDivider(title?: string): void {
+  if (title) {
+    console.log(`${LOG_PREFIX} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
+  } else {
+    console.log(`${LOG_PREFIX} ${'─'.repeat(40)}`);
+  }
+}
+
+/**
  * 子代理管理器
  *
  * 负责子代理的生命周期管理：
@@ -70,19 +86,31 @@ export class SubagentManager {
    * @throws 当并发数达到上限或权限检查失败时抛出错误
    */
   async spawn(options: SpawnOptions): Promise<string> {
-    // 检查并发限制
-    if (this.getActiveCount() >= this.maxConcurrent) {
-      throw new Error(`Maximum concurrent subagents reached (${this.maxConcurrent})`);
-    }
-
     const agentId = options.agentId ?? 'main';
     const parentAgentId = options.parentAgentId;
 
+    // ===== 日志：开始创建子代理 =====
+    printDivider(`创建子代理 ${agentId}`);
+    console.log(`${LOG_PREFIX} 📋 父 Agent: ${parentAgentId || '(无)'}`);
+    console.log(`${LOG_PREFIX} 📋 任务: ${options.task.substring(0, 100)}${options.task.length > 100 ? '...' : ''}`);
+    console.log(`${LOG_PREFIX} 📋 当前活跃子代理数: ${this.getActiveCount()}/${this.maxConcurrent}`);
+
+    // 检查并发限制
+    if (this.getActiveCount() >= this.maxConcurrent) {
+      console.log(`${LOG_PREFIX} ❌ 并发限制: 已达上限 ${this.maxConcurrent}`);
+      throw new Error(`Maximum concurrent subagents reached (${this.maxConcurrent})`);
+    }
+
     // 权限检查（如果有父 Agent）
-    if (parentAgentId && !this.registry.canSpawnSubagent(parentAgentId, agentId)) {
-      throw new Error(
-        `Agent '${parentAgentId}' is not allowed to spawn subagent of type '${agentId}'`
-      );
+    if (parentAgentId) {
+      const canSpawn = this.registry.canSpawnSubagent(parentAgentId, agentId);
+      console.log(`${LOG_PREFIX} 🔐 权限检查: ${parentAgentId} → ${agentId} = ${canSpawn ? '✅ 允许' : '❌ 拒绝'}`);
+      if (!canSpawn) {
+        console.log(`${LOG_PREFIX} ❌ 权限拒绝: ${parentAgentId} 不允许创建 ${agentId}`);
+        throw new Error(
+          `Agent '${parentAgentId}' is not allowed to spawn subagent of type '${agentId}'`
+        );
+      }
     }
 
     // 生成唯一 ID
@@ -107,10 +135,17 @@ export class SubagentManager {
     };
 
     this.subagents.set(id, info);
+    console.log(`${LOG_PREFIX} 🆔 子代理 ID: ${id}`);
+    console.log(`${LOG_PREFIX} 🆔 Session Key: ${sessionKey}`);
 
     // 通过 AgentRegistry 创建 Agent 实例
     try {
+      const agentConfig = this.registry.getConfig(agentId);
+      console.log(`${LOG_PREFIX} 📦 Agent 配置: ${agentConfig?.name || agentId}, model=${agentConfig?.model || '默认'}`);
+      
       this.registry.getOrCreate(sessionKey, agentId);
+      console.log(`${LOG_PREFIX} ✅ Agent 实例创建成功`);
+      printDivider();
     } catch (err) {
       // 创建失败，清理子代理信息
       this.subagents.delete(id);
@@ -154,47 +189,70 @@ export class SubagentManager {
     info.startedAt = new Date();
     const startTime = Date.now();
 
+    // ===== 日志：开始执行 =====
+    printDivider(`执行子代理 ${info.agentId}`);
+    console.log(`${LOG_PREFIX} 🆔 子代理 ID: ${subagentId}`);
+    console.log(`${LOG_PREFIX} 🆔 Session Key: ${info.sessionKey}`);
+    console.log(`${LOG_PREFIX} 📋 任务: ${info.task.substring(0, 100)}${info.task.length > 100 ? '...' : ''}`);
+    console.log(`${LOG_PREFIX} ⏱️ 超时: ${info.timeout}ms`);
+
     try {
       // 获取 Agent 实例
       const agent = this.registry.get(info.sessionKey);
       if (!agent) {
         throw new Error('Agent instance not found');
       }
+      console.log(`${LOG_PREFIX} ✅ 获取 Agent 实例成功`);
 
       // 构建任务消息
       let taskMessage = info.task;
       if (info.skills && info.skills.length > 0) {
         taskMessage = `[Skills: ${info.skills.join(', ')}]\n\n${info.task}`;
+        console.log(`${LOG_PREFIX} 📦 注入技能: ${info.skills.join(', ')}`);
       }
 
       // 调用 Agent 执行任务
+      console.log(`${LOG_PREFIX} 🚀 开始调用 Agent.chat()...`);
       const response = await agent.chat(taskMessage);
 
       // 标记完成
       info.status = 'completed';
       info.result = response.content;
       info.endedAt = new Date();
+      const duration = Date.now() - startTime;
+
+      // ===== 日志：执行完成 =====
+      console.log(`${LOG_PREFIX} ✅ 执行成功`);
+      console.log(`${LOG_PREFIX} ⏱️ 耗时: ${duration}ms`);
+      console.log(`${LOG_PREFIX} 📝 结果长度: ${response.content.length} 字符`);
+      printDivider();
 
       return {
         success: true,
         subagentId,
         data: response.content,
-        duration: Date.now() - startTime,
+        duration,
         status: 'completed'
       };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
+      const duration = Date.now() - startTime;
 
       // 标记失败
       info.status = 'failed';
       info.error = errorMsg;
       info.endedAt = new Date();
 
+      // ===== 日志：执行失败 =====
+      console.log(`${LOG_PREFIX} ❌ 执行失败: ${errorMsg}`);
+      console.log(`${LOG_PREFIX} ⏱️ 耗时: ${duration}ms`);
+      printDivider();
+
       return {
         success: false,
         subagentId,
         error: errorMsg,
-        duration: Date.now() - startTime,
+        duration,
         status: 'failed'
       };
     }
