@@ -51,7 +51,8 @@ function createAgentFactory(
     // 所有 Agent 都可以创建子代理（权限由 SubagentManager 检查）
     agent.registerTool(createSessionsSpawnTool({
       manager: subagentManager,
-      currentAgentId: agentId
+      currentAgentId: agentId,
+      registry: _registry  // 传入 registry 以动态生成工具描述
     }) as any);
     agent.registerTool(createSubagentsTool(subagentManager) as any);
 
