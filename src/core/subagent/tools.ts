@@ -92,6 +92,12 @@ export interface SessionsSpawnToolOptions {
   manager: SubagentManager;
   /** 当前 Agent ID（用于权限检查） */
   currentAgentId?: string;
+  /** Agent 注册表（用于动态生成工具描述） */
+  registry?: {
+    getAgentTypes(): string[];
+    getConfig(agentId: string): { name?: string; systemPrompt?: string } | undefined;
+    canSpawnSubagent(parentId: string, childId: string): boolean;
+  };
 }
 
 /**
@@ -100,21 +106,43 @@ export interface SessionsSpawnToolOptions {
  * @param options - 工具选项
  */
 export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
-  const { manager, currentAgentId = 'main' } = options;
+  const { manager, currentAgentId = 'main', registry } = options;
+
+  // 动态生成可用的子代理列表
+  let availableAgents = '';
+  if (registry) {
+    const allTypes = registry.getAgentTypes().filter(id => id !== currentAgentId);
+    const allowedTypes = allTypes.filter(id => registry.canSpawnSubagent(currentAgentId, id));
+
+    if (allowedTypes.length > 0) {
+      const agentDetails = allowedTypes.map(id => {
+        const config = registry.getConfig(id);
+        const name = config?.name || id;
+        // 从 systemPrompt 提取专长描述（前50字）
+        const specialty = config?.systemPrompt
+          ? config.systemPrompt.substring(0, 50).replace(/\n/g, ' ') + '...'
+          : '';
+        return `  - ${id}: ${name}${specialty ? ` — ${specialty}` : ''}`;
+      }).join('\n');
+      availableAgents = `\n\n可用的子代理类型：\n${agentDetails}`;
+    }
+  }
+
+  const description = `创建子代理执行专业任务。当用户问题涉及特定专业领域时，应调用相应的子代理。${availableAgents}
+
+参数：
+- task: 任务描述（必填）
+- agentId: 指定 Agent 类型（从上面的可用类型中选择）
+- timeout: 超时时间（秒），默认 60
+
+**重要**：遇到专业领域问题，优先使用此工具委托给专家子代理，不要自己回答。
+
+返回执行结果。`;
 
   return {
     name: 'sessions_spawn',
     label: '创建子代理',
-    description: `创建子代理执行任务。适用于：并行处理、专业任务委托。
-
-参数：
-- task: 任务描述
-- agentId: 指定 Agent 类型（如 etf、policy）
-- timeout: 超时时间（秒）
-- skills: 技能列表
-- model: 指定模型
-
-返回子代理 ID 和执行结果。`,
+    description,
     parameters: SessionsSpawnParamsSchema,
 
     async execute(
