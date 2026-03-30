@@ -132,13 +132,10 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
 
 参数：
 - task: 任务描述（必填）
-- agentId: 指定 Agent 类型（如 etf、policy）
+- agentId: 指定 Agent 类型（从上面的可用类型中选择）
 - timeout: 超时时间（秒），默认 60
 
-使用场景：
-- ETF/基金分析 → 调用 etf
-- 宏观政策分析 → 调用 policy
-- 需要专业视角时，优先调用子代理
+**重要**：遇到专业领域问题，优先使用此工具委托给专家子代理，不要自己回答。
 
 返回执行结果。`;
 
