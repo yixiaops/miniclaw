@@ -28,6 +28,17 @@ function getLogPrefix(agentId: string): string {
 }
 
 /**
+ * 获取调用者日志前缀
+ * 
+ * @param callerId - 调用者 ID
+ * @param isSubagent - 调用者是否是子代理
+ * @returns 日志前缀字符串
+ */
+function getCallerPrefix(callerId: string, isSubagent: boolean): string {
+  return isSubagent ? `[Subagent:${callerId}]` : `[${callerId}]`;
+}
+
+/**
  * 打印日志
  * 
  * @param agentId - Agent 类型 ID
@@ -35,6 +46,17 @@ function getLogPrefix(agentId: string): string {
  */
 function log(agentId: string, message: string): void {
   console.log(`${getLogPrefix(agentId)} ${message}`);
+}
+
+/**
+ * 打印调用者日志
+ * 
+ * @param callerId - 调用者 ID
+ * @param isSubagent - 调用者是否是子代理
+ * @param message - 日志消息
+ */
+function logCaller(callerId: string, isSubagent: boolean, message: string): void {
+  console.log(`${getCallerPrefix(callerId, isSubagent)} ${message}`);
 }
 
 /**
@@ -48,6 +70,22 @@ function logDivider(agentId: string, title?: string): void {
     console.log(`${getLogPrefix(agentId)} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
   } else {
     console.log(`${getLogPrefix(agentId)} ${'─'.repeat(40)}`);
+  }
+}
+
+/**
+ * 打印调用者分隔线
+ * 
+ * @param callerId - 调用者 ID
+ * @param isSubagent - 调用者是否是子代理
+ * @param title - 分隔线标题（可选）
+ */
+function logCallerDivider(callerId: string, isSubagent: boolean, title?: string): void {
+  const prefix = getCallerPrefix(callerId, isSubagent);
+  if (title) {
+    console.log(`${prefix} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
+  } else {
+    console.log(`${prefix} ${'─'.repeat(40)}`);
   }
 }
 
@@ -106,25 +144,29 @@ export class SubagentManager {
   async spawn(options: SpawnOptions): Promise<string> {
     const agentId = options.agentId ?? 'main';
     const parentAgentId = options.parentAgentId;
+    const parentIsSubagent = options.parentIsSubagent || false;
+    
+    // 日志前缀：使用调用者身份（不是目标子代理身份）
+    const callerId = parentAgentId || 'system';
 
     // ===== 日志：开始创建子代理 =====
-    logDivider(agentId, `创建子代理 ${agentId}`);
-    log(agentId, `📋 父 Agent: ${parentAgentId || '(无)'}`);
-    log(agentId, `📋 任务: ${options.task.substring(0, 100)}${options.task.length > 100 ? '...' : ''}`);
-    log(agentId, `📋 当前活跃子代理数: ${this.getActiveCount()}/${this.maxConcurrent}`);
+    logCallerDivider(callerId, parentIsSubagent, `创建子代理 ${agentId}`);
+    logCaller(callerId, parentIsSubagent, `📋 目标 Agent: ${agentId}`);
+    logCaller(callerId, parentIsSubagent, `📋 任务: ${options.task.substring(0, 100)}${options.task.length > 100 ? '...' : ''}`);
+    logCaller(callerId, parentIsSubagent, `📋 当前活跃子代理数: ${this.getActiveCount()}/${this.maxConcurrent}`);
 
     // 检查并发限制
     if (this.getActiveCount() >= this.maxConcurrent) {
-      log(agentId, `❌ 并发限制: 已达上限 ${this.maxConcurrent}`);
+      logCaller(callerId, parentIsSubagent, `❌ 并发限制: 已达上限 ${this.maxConcurrent}`);
       throw new Error(`Maximum concurrent subagents reached (${this.maxConcurrent})`);
     }
 
     // 权限检查（如果有父 Agent）
     if (parentAgentId) {
       const canSpawn = this.registry.canSpawnSubagent(parentAgentId, agentId);
-      log(agentId, `🔐 权限检查: ${parentAgentId} → ${agentId} = ${canSpawn ? '✅ 允许' : '❌ 拒绝'}`);
+      logCaller(callerId, parentIsSubagent, `🔐 权限检查: ${parentAgentId} → ${agentId} = ${canSpawn ? '✅ 允许' : '❌ 拒绝'}`);
       if (!canSpawn) {
-        log(agentId, `❌ 权限拒绝: ${parentAgentId} 不允许创建 ${agentId}`);
+        logCaller(callerId, parentIsSubagent, `❌ 权限拒绝: ${parentAgentId} 不允许创建 ${agentId}`);
         throw new Error(
           `Agent '${parentAgentId}' is not allowed to spawn subagent of type '${agentId}'`
         );
@@ -153,17 +195,17 @@ export class SubagentManager {
     };
 
     this.subagents.set(id, info);
-    log(agentId, `🆔 子代理 ID: ${id}`);
-    log(agentId, `🆔 Session Key: ${sessionKey}`);
+    logCaller(callerId, parentIsSubagent, `🆔 子代理 ID: ${id}`);
+    logCaller(callerId, parentIsSubagent, `🆔 Session Key: ${sessionKey}`);
 
     // 通过 AgentRegistry 创建 Agent 实例
     try {
       const agentConfig = this.registry.getConfig(agentId);
-      log(agentId, `📦 Agent 配置: ${agentConfig?.name || agentId}, model=${agentConfig?.model || '默认'}`);
+      logCaller(callerId, parentIsSubagent, `📦 Agent 配置: ${agentConfig?.name || agentId}, model=${agentConfig?.model || '默认'}`);
       
       this.registry.getOrCreate(sessionKey, agentId);
-      log(agentId, `✅ Agent 实例创建成功`);
-      logDivider(agentId, );
+      logCaller(callerId, parentIsSubagent, `✅ Agent 实例创建成功`);
+      logCallerDivider(callerId, parentIsSubagent);
     } catch (err) {
       // 创建失败，清理子代理信息
       this.subagents.delete(id);

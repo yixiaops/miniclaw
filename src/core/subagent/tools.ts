@@ -181,6 +181,7 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
           task: params.task,
           agentId: params.agentId,
           parentAgentId: parentAgent,
+          parentIsSubagent: isSubagent,  // 传入调用者身份
           timeout: params.timeout ? params.timeout * 1000 : undefined,
           skills: params.skills,
           model: params.model

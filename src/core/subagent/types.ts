@@ -59,6 +59,8 @@ export interface SpawnOptions {
   agentId?: string;
   /** 父 Agent ID（用于权限检查） */
   parentAgentId?: string;
+  /** 父 Agent 是否是子代理（用于日志前缀） */
+  parentIsSubagent?: boolean;
   /** 超时时间（毫秒），默认 60000 */
   timeout?: number;
   /** 技能列表 */
