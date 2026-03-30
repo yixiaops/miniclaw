@@ -38,7 +38,8 @@ function createAgentFactory(
       systemPrompt: agentConfig?.systemPrompt,
       tools: [], // 先不传工具，后面单独注册
       agentId,
-      isSubagent: isSubagent || false
+      isSubagent: isSubagent || false,
+      thinkingLevel: agentConfig?.thinkingLevel || 'low'  // 默认 low 级别推理
     });
 
     // 如果指定了模型，切换模型
