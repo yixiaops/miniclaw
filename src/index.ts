@@ -28,14 +28,17 @@ function createAgentFactory(
     sessionKey: string,
     config: Config,
     agentId: string,
-    agentConfig?: AgentConfig
+    agentConfig?: AgentConfig,
+    isSubagent?: boolean
   ) => {
-    console.log(`[Gateway] 创建新 Agent: ${sessionKey} (type: ${agentId})`);
+    console.log(`[Gateway] 创建新 Agent: ${sessionKey} (type: ${agentId}, isSubagent: ${isSubagent || false})`);
 
     // 创建 Agent
     const agent = new MiniclawAgent(config, {
       systemPrompt: agentConfig?.systemPrompt,
-      tools: [] // 先不传工具，后面单独注册
+      tools: [], // 先不传工具，后面单独注册
+      agentId,
+      isSubagent: isSubagent || false
     });
 
     // 如果指定了模型，切换模型

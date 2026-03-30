@@ -29,7 +29,8 @@ export type CreateAgentFn = (
   sessionKey: string,
   config: Config,
   agentId: string,
-  agentConfig?: AgentConfig
+  agentConfig?: AgentConfig,
+  isSubagent?: boolean
 ) => MiniclawAgent;
 
 /**
@@ -171,11 +172,14 @@ export class AgentRegistry {
    *
    * @param sessionKey - Session Key
    * @param agentId - Agent 类型 ID（可选，默认 'main'）
+   * @param isSubagent - 是否是子代理（可选，默认根据 sessionKey 判断）
    * @returns Agent 实例
    * @throws 当达到最大 Agent 数量时抛出错误
    */
-  getOrCreate(sessionKey: string, agentId?: string): MiniclawAgent {
+  getOrCreate(sessionKey: string, agentId?: string, isSubagent?: boolean): MiniclawAgent {
     const targetAgentId = agentId || 'main';
+    // 自动判断是否是子代理（sessionKey 以 'subagent:' 开头）
+    const isSub = isSubagent ?? sessionKey.startsWith('subagent:');
 
     // 检查是否已存在
     const existing = this.agents.get(sessionKey);
@@ -194,7 +198,7 @@ export class AgentRegistry {
     const agentConfig = this.configs.get(targetAgentId);
 
     // 创建新 Agent
-    const agent = this.createAgentFn(sessionKey, this.config, targetAgentId, agentConfig);
+    const agent = this.createAgentFn(sessionKey, this.config, targetAgentId, agentConfig, isSub);
     this.agents.set(sessionKey, {
       agent,
       agentId: targetAgentId,

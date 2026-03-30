@@ -152,12 +152,13 @@ describe('MiniclawGateway', () => {
       await gateway.handleMessage(ctx);
 
       // 验证 createAgentFn 被调用时传递了正确的参数
-      // 新签名: (sessionKey, config, agentId, agentConfig)
+      // 新签名: (sessionKey, config, agentId, agentConfig, isSubagent)
       expect(createAgentFn).toHaveBeenCalledWith(
         expect.any(String),
         mockConfig,
         'main',
-        undefined
+        undefined,
+        false  // isSubagent = false for main agent
       );
     });
   });

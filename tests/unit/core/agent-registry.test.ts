@@ -58,8 +58,8 @@ describe('AgentRegistry', () => {
       const agent = registry.getOrCreate(sessionKey);
 
       expect(agent).toBeDefined();
-      // 新签名: (sessionKey, config, agentId, agentConfig)
-      expect(createAgentFn).toHaveBeenCalledWith(sessionKey, mockConfig, 'main', undefined);
+      // 新签名: (sessionKey, config, agentId, agentConfig, isSubagent)
+      expect(createAgentFn).toHaveBeenCalledWith(sessionKey, mockConfig, 'main', undefined, false);
       expect(createAgentFn).toHaveBeenCalledTimes(1);
     });
 

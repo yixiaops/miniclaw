@@ -50,12 +50,18 @@ import type { Config } from '../config.js';
  * 
  * @property systemPrompt - 系统提示词，定义 Agent 的角色和行为
  * @property tools - 初始工具列表，Agent 可以调用的工具
+ * @property agentId - Agent 类型 ID（如 main、etf、policy）
+ * @property isSubagent - 是否是子代理
  */
 export interface MiniclawAgentOptions {
   /** 系统提示词 */
   systemPrompt?: string;
   /** 初始工具列表 */
   tools?: AgentTool[];
+  /** Agent 类型 ID */
+  agentId?: string;
+  /** 是否是子代理 */
+  isSubagent?: boolean;
 }
 
 /**
@@ -146,12 +152,6 @@ const DEFAULT_SYSTEM_PROMPT = `你是 Miniclaw，一个专业、可靠的 AI 助
 - 用户目录：\`~\`（通过 shell 访问）
 
 请用简洁、专业的方式回复用户。行动前多思考，不确定时先确认。`;
-
-/**
- * 日志前缀
- * 用于在控制台输出中标识 Agent 相关日志
- */
-const LOG_PREFIX = '[Agent]';
 
 // ============================================================================
 // 工具函数
@@ -253,21 +253,6 @@ function formatMessagesForLog(messages: AgentMessage[], maxLength: number = 100)
     
     return `  [${index + 1}] ${msg.role}: ${contentPreview}`;
   }).join('\n');
-}
-
-/**
- * 打印分隔线
- * 
- * 用于日志输出的视觉分隔。
- * 
- * @param title - 分隔线标题（可选）
- */
-function printDivider(title?: string): void {
-  if (title) {
-    console.log(`${LOG_PREFIX} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
-  } else {
-    console.log(`${LOG_PREFIX} ${'─'.repeat(40)}`);
-  }
 }
 
 // ============================================================================
@@ -374,6 +359,45 @@ export class MiniclawAgent {
   
   /** 当前使用的模型标识符 */
   private currentModel: string;
+  
+  /** Agent 类型 ID */
+  private agentId: string;
+  
+  /** 是否是子代理 */
+  private isSubagent: boolean;
+
+  /**
+   * 获取日志前缀
+   * 
+   * @returns 日志前缀字符串
+   */
+  private getLogPrefix(): string {
+    return this.isSubagent 
+      ? `[Subagent:${this.agentId}]` 
+      : `[${this.agentId}]`;
+  }
+  
+  /**
+   * 打印日志
+   * 
+   * @param message - 日志消息
+   */
+  private log(message: string): void {
+    console.log(`${this.getLogPrefix()} ${message}`);
+  }
+  
+  /**
+   * 打印分隔线
+   * 
+   * @param title - 分隔线标题（可选）
+   */
+  private logDivider(title?: string): void {
+    if (title) {
+      console.log(`${this.getLogPrefix()} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
+    } else {
+      console.log(`${this.getLogPrefix()} ${'─'.repeat(40)}`);
+    }
+  }
 
   /**
    * 创建 MiniclawAgent 实例
@@ -383,20 +407,22 @@ export class MiniclawAgent {
    */
   constructor(config: Config, options?: MiniclawAgentOptions) {
     this.config = config;
+    this.agentId = options?.agentId || 'main';
+    this.isSubagent = options?.isSubagent || false;
     this.currentModel = config.bailian.model;
 
-    console.log(`${LOG_PREFIX} 初始化 Agent`);
-    console.log(`${LOG_PREFIX} 模型: ${this.currentModel}`);
-    console.log(`${LOG_PREFIX} API 地址: ${config.bailian.baseUrl}`);
+    this.log(`初始化 Agent`);
+    this.log(`模型: ${this.currentModel}`);
+    this.log(`API 地址: ${config.bailian.baseUrl}`);
 
     // 创建底层 Agent - 不传递空 tools 数组
     // pi-agent-core 对空数组有特殊处理，undefined 表示无工具
     const initialTools = options?.tools && options.tools.length > 0 ? options.tools : undefined;
     
     if (initialTools && initialTools.length > 0) {
-      console.log(`${LOG_PREFIX} 初始工具数量: ${initialTools.length}`);
+      this.log(`初始工具数量: ${initialTools.length}`);
       initialTools.forEach(tool => {
-        console.log(`${LOG_PREFIX}   - ${tool.name}: ${tool.description.substring(0, 50)}...`);
+        this.log(`  - ${tool.name}: ${tool.description.substring(0, 50)}...`);
       });
     }
 
@@ -436,7 +462,7 @@ export class MiniclawAgent {
       this.tools = options.tools;
     }
     
-    console.log(`${LOG_PREFIX} Agent 初始化完成`);
+    this.log(`Agent 初始化完成`);
   }
 
   // ==========================================================================
@@ -471,7 +497,7 @@ export class MiniclawAgent {
    * @param prompt - 新的系统提示词
    */
   setSystemPrompt(prompt: string): void {
-    console.log(`${LOG_PREFIX} 更新系统提示词 (${prompt.length} 字符)`);
+    this.log(`更新系统提示词 (${prompt.length} 字符)`);
     this.agent.setSystemPrompt(prompt);
   }
 
@@ -498,7 +524,7 @@ export class MiniclawAgent {
    * @param model - 模型标识符（如 "qwen-turbo"、"qwen-plus"）
    */
   setModel(model: string): void {
-    console.log(`${LOG_PREFIX} 切换模型: ${this.currentModel} -> ${model}`);
+    this.log(`切换模型: ${this.currentModel} -> ${model}`);
     this.currentModel = model;
     this.config.bailian.model = model;
     this.agent.setModel(createBailianModel(this.config));
@@ -527,7 +553,7 @@ export class MiniclawAgent {
    * @returns 包含响应内容的 Promise
    */
   async chat(input: string): Promise<{ content: string }> {
-    console.log(`${LOG_PREFIX} ═════════════ 开始对话 ═════════════`);
+    this.log(`═════════════ 开始对话 ═════════════`);
     
     // ===== 发送前：打印上下文 =====
     this.logSendContext(input);
@@ -548,7 +574,7 @@ export class MiniclawAgent {
       // 工具调用事件：工具开始执行
       if (event.type === 'tool_execution_start') {
         toolCallCount++;
-        console.log(`${LOG_PREFIX} 🔧 工具调用 #${toolCallCount}: ${event.toolName}`);
+        this.log(`🔧 工具调用 #${toolCallCount}: ${event.toolName}`);
       }
       
       // 工具调用事件：工具执行完成
@@ -556,7 +582,7 @@ export class MiniclawAgent {
         const resultPreview = typeof event.result === 'string' 
           ? event.result.substring(0, 100) 
           : JSON.stringify(event.result).substring(0, 100);
-        console.log(`${LOG_PREFIX} ✅ 工具结果 #${toolCallCount}: ${resultPreview}...`);
+        this.log(`✅ 工具结果 #${toolCallCount}: ${resultPreview}...`);
       }
     });
 
@@ -570,7 +596,7 @@ export class MiniclawAgent {
     // ===== 接收后：打印详情 =====
     this.logReceiveDetails(fullContent, toolCallCount, startTime);
     
-    console.log(`${LOG_PREFIX} ═════════════ 对话结束 ═════════════\n`);
+    this.log(`═════════════ 对话结束 ═════════════\n`);
 
     // 返回收集到的内容
     if (fullContent) {
@@ -618,7 +644,7 @@ export class MiniclawAgent {
    * @yields 流式响应事件
    */
   async *streamChat(input: string): AsyncGenerator<StreamChatEvent> {
-    console.log(`${LOG_PREFIX} ═════════════ 开始流式对话 ═════════════`);
+    this.log(`═════════════ 开始流式对话 ═════════════`);
     
     // ===== 发送前：打印上下文 =====
     this.logSendContext(input);
@@ -658,10 +684,10 @@ export class MiniclawAgent {
         // 当 Agent 决定调用工具时触发
         case 'tool_execution_start':
           toolCallCount++;
-          console.log(`${LOG_PREFIX} 🔧 工具调用开始: ${event.toolName}`);
+          this.log(`🔧 工具调用开始: ${event.toolName}`);
           // 打印工具参数（如果有）
           if (event.args) {
-            console.log(`${LOG_PREFIX}    参数: ${JSON.stringify(event.args).substring(0, 200)}`);
+            this.log(`   参数: ${JSON.stringify(event.args).substring(0, 200)}`);
           }
           eventQueue.push({
             toolName: event.toolName,
@@ -673,12 +699,12 @@ export class MiniclawAgent {
         // 工具执行结束事件
         // 工具执行完成后触发，包含执行结果
         case 'tool_execution_end':
-          console.log(`${LOG_PREFIX} ✅ 工具执行完成: ${event.toolName}`);
+          this.log(`✅ 工具执行完成: ${event.toolName}`);
           // 打印结果预览
           const resultPreview = typeof event.result === 'string'
             ? event.result.substring(0, 100)
             : JSON.stringify(event.result).substring(0, 100);
-          console.log(`${LOG_PREFIX}    结果: ${resultPreview}${resultPreview.length >= 100 ? '...' : ''}`);
+          this.log(`   结果: ${resultPreview}${resultPreview.length >= 100 ? '...' : ''}`);
           eventQueue.push({
             toolName: event.toolName,
             toolStatus: 'end',
@@ -690,7 +716,7 @@ export class MiniclawAgent {
         // Agent 结束事件
         // 所有处理完成，包括工具调用和响应生成
         case 'agent_end':
-          console.log(`${LOG_PREFIX} Agent 处理完成`);
+          this.log(`Agent 处理完成`);
           isComplete = true;
           eventQueue.push({ done: true });
           break;
@@ -710,7 +736,7 @@ export class MiniclawAgent {
       // prompt 完成后，如果没有收到 agent_end 事件，手动标记完成
       // 这是为了兼容可能不发送 agent_end 事件的实现
       if (!isComplete) {
-        console.log(`${LOG_PREFIX} ⚠️ prompt 完成，但未收到 agent_end 事件`);
+        this.log(`⚠️ prompt 完成，但未收到 agent_end 事件`);
         isComplete = true;
         eventQueue.push({ done: true });
         if (resolveEvent) {
@@ -719,7 +745,7 @@ export class MiniclawAgent {
         }
       }
     }).catch((error) => {
-      console.log(`${LOG_PREFIX} ❌ prompt 执行错误: ${error.message}`);
+      this.log(`❌ prompt 执行错误: ${error.message}`);
       eventQueue.push({ content: `Error: ${error.message}`, done: false });
       isComplete = true;
       eventQueue.push({ done: true });
@@ -761,7 +787,7 @@ export class MiniclawAgent {
     
     // 打印总结信息
     this.logReceiveDetails('[流式输出]', toolCallCount, startTime);
-    console.log(`${LOG_PREFIX} ═════════════ 流式对话结束 ═════════════\n`);
+    this.log(`═════════════ 流式对话结束 ═════════════\n`);
   }
 
   // ==========================================================================
@@ -785,7 +811,7 @@ export class MiniclawAgent {
    * 清空对话历史，开始新的对话。系统提示词和工具配置保持不变。
    */
   reset(): void {
-    console.log(`${LOG_PREFIX} 重置对话历史`);
+    this.log(`重置对话历史`);
     this.agent.reset();
   }
 
@@ -820,7 +846,7 @@ export class MiniclawAgent {
    * @param tool - 要注册的工具
    */
   registerTool(tool: AgentTool): void {
-    console.log(`${LOG_PREFIX} 注册工具: ${tool.name}`);
+    this.log(`注册工具: ${tool.name}`);
     this.tools.push(tool);
     this.agent.setTools(this.tools);
   }
@@ -840,7 +866,7 @@ export class MiniclawAgent {
    * 移除所有已注册的工具。Agent 将不再能调用任何工具。
    */
   clearTools(): void {
-    console.log(`${LOG_PREFIX} 清除所有工具 (共 ${this.tools.length} 个)`);
+    this.log(`清除所有工具 (共 ${this.tools.length} 个)`);
     this.tools = [];
     this.agent.setTools([]);
   }
@@ -874,7 +900,7 @@ export class MiniclawAgent {
    * 中止当前正在进行的请求或工具调用。
    */
   abort(): void {
-    console.log(`${LOG_PREFIX} ⚠️ 中断当前操作`);
+    this.log(`⚠️ 中断当前操作`);
     this.agent.abort();
   }
 
@@ -895,44 +921,44 @@ export class MiniclawAgent {
    * @private
    */
   private logSendContext(input: string): void {
-    printDivider('发送上下文');
+    this.logDivider('发送上下文');
     
     // 打印用户输入
-    console.log(`${LOG_PREFIX} 📝 用户输入:`);
-    console.log(`${LOG_PREFIX}   "${input}"`);
-    console.log(`${LOG_PREFIX}    - 输入 Token 估算: ${estimateTokens(input)}`);
+    this.log(`📝 用户输入:`);
+    this.log(`  "${input}"`);
+    this.log(`   - 输入 Token 估算: ${estimateTokens(input)}`);
     
     // 打印系统提示词
     const systemPrompt = this.agent.state.systemPrompt;
-    console.log(`${LOG_PREFIX} 📋 系统提示词 (${systemPrompt.length} 字符, ~${estimateTokens(systemPrompt)} tokens):`);
+    this.log(`📋 系统提示词 (${systemPrompt.length} 字符, ~${estimateTokens(systemPrompt)} tokens):`);
     const promptPreview = systemPrompt.length > 150 
       ? systemPrompt.substring(0, 150) + '...' 
       : systemPrompt;
-    console.log(`${LOG_PREFIX}   ${promptPreview.replace(/\n/g, '\n   ')}`);
+    this.log(`  ${promptPreview.replace(/\n/g, '\n   ')}`);
     
     // 打印对话历史
     const messages = this.agent.state.messages;
     if (messages.length > 0) {
-      console.log(`${LOG_PREFIX} 📚 对话历史 (${messages.length} 条消息):`);
+      this.log(`📚 对话历史 (${messages.length} 条消息):`);
       console.log(formatMessagesForLog(messages));
-      console.log(`${LOG_PREFIX}    - 历史 Token 估算: ${estimateMessagesTokens(messages)}`);
+      this.log(`   - 历史 Token 估算: ${estimateMessagesTokens(messages)}`);
     } else {
-      console.log(`${LOG_PREFIX} 📚 对话历史: (空)`);
+      this.log(`📚 对话历史: (空)`);
     }
     
     // 打印工具信息
     if (this.tools.length > 0) {
-      console.log(`${LOG_PREFIX} 🔧 可用工具 (${this.tools.length} 个):`);
+      this.log(`🔧 可用工具 (${this.tools.length} 个):`);
       this.tools.forEach(tool => {
-        console.log(`${LOG_PREFIX}   - ${tool.name}: ${tool.description.substring(0, 40)}...`);
+        this.log(`  - ${tool.name}: ${tool.description.substring(0, 40)}...`);
       });
     }
     
     // 打印总 Token 估算
     const totalTokens = estimateTokens(input) + estimateTokens(systemPrompt) + estimateMessagesTokens(messages);
-    console.log(`${LOG_PREFIX} 📊 总 Token 估算: ~${totalTokens}`);
+    this.log(`📊 总 Token 估算: ~${totalTokens}`);
     
-    printDivider();
+    this.logDivider();
   }
 
   /**
@@ -949,27 +975,27 @@ export class MiniclawAgent {
    * @private
    */
   private logReceiveDetails(content: string, toolCallCount: number, startTime: number): void {
-    printDivider('接收详情');
+    this.logDivider('接收详情');
     
     const duration = Date.now() - startTime;
     
     // 打印响应内容预览
-    console.log(`${LOG_PREFIX} 💬 响应内容 (${content.length} 字符, ~${estimateTokens(content)} tokens):`);
+    this.log(`💬 响应内容 (${content.length} 字符, ~${estimateTokens(content)} tokens):`);
     const contentPreview = content.length > 200 
       ? content.substring(0, 200) + '...' 
       : content;
-    console.log(`${LOG_PREFIX}   ${contentPreview.replace(/\n/g, '\n   ')}`);
+    this.log(`  ${contentPreview.replace(/\n/g, '\n   ')}`);
     
     // 打印工具调用统计
-    console.log(`${LOG_PREFIX} 🔧 工具调用次数: ${toolCallCount}`);
+    this.log(`🔧 工具调用次数: ${toolCallCount}`);
     
     // 打印处理时长
-    console.log(`${LOG_PREFIX} ⏱️ 处理时长: ${duration}ms`);
+    this.log(`⏱️ 处理时长: ${duration}ms`);
     
     // 打印更新后的历史消息数
     const messages = this.agent.state.messages;
-    console.log(`${LOG_PREFIX} 📚 当前历史消息数: ${messages.length}`);
+    this.log(`📚 当前历史消息数: ${messages.length}`);
     
-    printDivider();
+    this.logDivider();
   }
 }
