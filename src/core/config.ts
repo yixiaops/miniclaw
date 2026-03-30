@@ -1,9 +1,10 @@
 /**
  * 配置模块
- * 管理应用配置，支持环境变量加载
+ * 管理应用配置，支持环境变量和 config.json 加载
  */
 import { join } from 'path';
 import { homedir } from 'os';
+import { existsSync, readFileSync } from 'fs';
 
 /**
  * 百炼配置
@@ -156,6 +157,22 @@ export function loadConfig(): Config {
       encryptKey: process.env.MINICLAW_FEISHU_ENCRYPT_KEY,
       verificationToken: process.env.MINICLAW_FEISHU_VERIFICATION_TOKEN
     };
+  }
+
+  // 加载 config.json 中的 agents 配置
+  const configPath = getConfigPath();
+  if (existsSync(configPath)) {
+    try {
+      const fileContent = readFileSync(configPath, 'utf-8');
+      const jsonConfig = JSON.parse(fileContent);
+
+      if (jsonConfig.agents) {
+        config.agents = jsonConfig.agents;
+        console.log(`[Config] 从 ${configPath} 加载了 ${jsonConfig.agents.list?.length || 0} 个 Agent 配置`);
+      }
+    } catch (err) {
+      console.warn(`[Config] 加载 ${configPath} 失败:`, err instanceof Error ? err.message : err);
+    }
   }
 
   return config;
