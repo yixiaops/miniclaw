@@ -11,12 +11,6 @@ import { Type, type Static } from '@sinclair/typebox';
 import type { SubagentManager } from './manager.js';
 
 // ============================================================================
-// 日志配置
-// ============================================================================
-
-const LOG_PREFIX = '[SubagentTool]';
-
-// ============================================================================
 // 类型定义
 // ============================================================================
 
@@ -98,6 +92,8 @@ export interface SessionsSpawnToolOptions {
     getConfig(agentId: string): { name?: string; systemPrompt?: string } | undefined;
     canSpawnSubagent(parentId: string, childId: string): boolean;
   };
+  /** 当前 Agent 是否是子代理 */
+  isSubagent?: boolean;
 }
 
 /**
@@ -106,7 +102,11 @@ export interface SessionsSpawnToolOptions {
  * @param options - 工具选项
  */
 export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
-  const { manager, currentAgentId = 'main', registry } = options;
+  const { manager, currentAgentId = 'main', registry, isSubagent = false } = options;
+
+  // 动态日志前缀
+  const getLogPrefix = () => isSubagent ? `[Subagent:${currentAgentId}]` : `[${currentAgentId}]`;
+  const log = (message: string) => console.log(`${getLogPrefix()} ${message}`);
 
   // 动态生成可用的子代理列表
   let availableAgents = '';
@@ -153,17 +153,17 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
       const parentAgent = params.parentAgentId || currentAgentId;
 
       // ===== 日志：工具调用开始 =====
-      console.log(`${LOG_PREFIX} ═════════════ 工具调用 sessions_spawn ═════════════`);
-      console.log(`${LOG_PREFIX} 📋 调用参数:`);
-      console.log(`${LOG_PREFIX}    - agentId: ${agentId}`);
-      console.log(`${LOG_PREFIX}    - parentAgentId: ${parentAgent}`);
-      console.log(`${LOG_PREFIX}    - task: ${params.task.substring(0, 80)}${params.task.length > 80 ? '...' : ''}`);
-      console.log(`${LOG_PREFIX}    - timeout: ${params.timeout || 60}s`);
+      log(`═════════════ 工具调用 sessions_spawn ═════════════`);
+      log(`📋 调用参数:`);
+      log(`   - agentId: ${agentId}`);
+      log(`   - parentAgentId: ${parentAgent}`);
+      log(`   - task: ${params.task.substring(0, 80)}${params.task.length > 80 ? '...' : ''}`);
+      log(`   - timeout: ${params.timeout || 60}s`);
 
       try {
         // 检查是否可以创建
         if (!manager.canSpawn()) {
-          console.log(`${LOG_PREFIX} ❌ 已达最大并发数`);
+          log(`❌ 已达最大并发数`);
           return {
             content: [{ type: 'text', text: '错误: 已达到最大并发子代理数' }],
             details: {
@@ -176,11 +176,12 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
         }
 
         // 创建并执行子代理
-        console.log(`${LOG_PREFIX} 🚀 调用 SubagentManager.spawnAndExecute()...`);
+        log(`🚀 调用 SubagentManager.spawnAndExecute()...`);
         const result = await manager.spawnAndExecute({
           task: params.task,
           agentId: params.agentId,
           parentAgentId: parentAgent,
+          parentIsSubagent: isSubagent,  // 传入调用者身份
           timeout: params.timeout ? params.timeout * 1000 : undefined,
           skills: params.skills,
           model: params.model
@@ -189,10 +190,10 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
         // 返回结果
         if (result.success) {
           const info = manager.get(result.subagentId);
-          console.log(`${LOG_PREFIX} ✅ 子代理执行成功`);
-          console.log(`${LOG_PREFIX}    - subagentId: ${result.subagentId}`);
-          console.log(`${LOG_PREFIX}    - duration: ${result.duration}ms`);
-          console.log(`${LOG_PREFIX} ══════════════════════════════════════════════════════`);
+          log(`✅ 子代理执行成功`);
+          log(`   - subagentId: ${result.subagentId}`);
+          log(`   - duration: ${result.duration}ms`);
+          log(`══════════════════════════════════════════════════════`);
           return {
             content: [{ type: 'text', text: result.data || '任务执行成功' }],
             details: {
@@ -203,8 +204,8 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
             }
           };
         } else {
-          console.log(`${LOG_PREFIX} ❌ 子代理执行失败: ${result.error}`);
-          console.log(`${LOG_PREFIX} ══════════════════════════════════════════════════════`);
+          log(`❌ 子代理执行失败: ${result.error}`);
+          log(`══════════════════════════════════════════════════════`);
           const info = manager.get(result.subagentId);
           return {
             content: [{ type: 'text', text: `错误: ${result.error}` }],
@@ -219,8 +220,8 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
 
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.log(`${LOG_PREFIX} ❌ 异常: ${message}`);
-        console.log(`${LOG_PREFIX} ══════════════════════════════════════════════════════`);
+        log(`❌ 异常: ${message}`);
+        log(`══════════════════════════════════════════════════════`);
         return {
           content: [{ type: 'text', text: `错误: ${message}` }],
           details: {

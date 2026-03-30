@@ -18,18 +18,74 @@ import type {
 import type { AgentRegistry } from '../agent/registry.js';
 
 /**
- * 日志前缀
+ * 获取日志前缀
+ * 
+ * @param agentId - Agent 类型 ID
+ * @returns 日志前缀字符串
  */
-const LOG_PREFIX = '[Subagent]';
+function getLogPrefix(agentId: string): string {
+  return `[Subagent:${agentId}]`;
+}
+
+/**
+ * 获取调用者日志前缀
+ * 
+ * @param callerId - 调用者 ID
+ * @param isSubagent - 调用者是否是子代理
+ * @returns 日志前缀字符串
+ */
+function getCallerPrefix(callerId: string, isSubagent: boolean): string {
+  return isSubagent ? `[Subagent:${callerId}]` : `[${callerId}]`;
+}
+
+/**
+ * 打印日志
+ * 
+ * @param agentId - Agent 类型 ID
+ * @param message - 日志消息
+ */
+function log(agentId: string, message: string): void {
+  console.log(`${getLogPrefix(agentId)} ${message}`);
+}
+
+/**
+ * 打印调用者日志
+ * 
+ * @param callerId - 调用者 ID
+ * @param isSubagent - 调用者是否是子代理
+ * @param message - 日志消息
+ */
+function logCaller(callerId: string, isSubagent: boolean, message: string): void {
+  console.log(`${getCallerPrefix(callerId, isSubagent)} ${message}`);
+}
 
 /**
  * 打印分隔线
+ * 
+ * @param agentId - Agent 类型 ID
+ * @param title - 分隔线标题（可选）
  */
-function printDivider(title?: string): void {
+function logDivider(agentId: string, title?: string): void {
   if (title) {
-    console.log(`${LOG_PREFIX} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
+    console.log(`${getLogPrefix(agentId)} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
   } else {
-    console.log(`${LOG_PREFIX} ${'─'.repeat(40)}`);
+    console.log(`${getLogPrefix(agentId)} ${'─'.repeat(40)}`);
+  }
+}
+
+/**
+ * 打印调用者分隔线
+ * 
+ * @param callerId - 调用者 ID
+ * @param isSubagent - 调用者是否是子代理
+ * @param title - 分隔线标题（可选）
+ */
+function logCallerDivider(callerId: string, isSubagent: boolean, title?: string): void {
+  const prefix = getCallerPrefix(callerId, isSubagent);
+  if (title) {
+    console.log(`${prefix} ${'═'.repeat(10)} ${title} ${'═'.repeat(10)}`);
+  } else {
+    console.log(`${prefix} ${'─'.repeat(40)}`);
   }
 }
 
@@ -88,25 +144,29 @@ export class SubagentManager {
   async spawn(options: SpawnOptions): Promise<string> {
     const agentId = options.agentId ?? 'main';
     const parentAgentId = options.parentAgentId;
+    const parentIsSubagent = options.parentIsSubagent || false;
+    
+    // 日志前缀：使用调用者身份（不是目标子代理身份）
+    const callerId = parentAgentId || 'system';
 
     // ===== 日志：开始创建子代理 =====
-    printDivider(`创建子代理 ${agentId}`);
-    console.log(`${LOG_PREFIX} 📋 父 Agent: ${parentAgentId || '(无)'}`);
-    console.log(`${LOG_PREFIX} 📋 任务: ${options.task.substring(0, 100)}${options.task.length > 100 ? '...' : ''}`);
-    console.log(`${LOG_PREFIX} 📋 当前活跃子代理数: ${this.getActiveCount()}/${this.maxConcurrent}`);
+    logCallerDivider(callerId, parentIsSubagent, `创建子代理 ${agentId}`);
+    logCaller(callerId, parentIsSubagent, `📋 目标 Agent: ${agentId}`);
+    logCaller(callerId, parentIsSubagent, `📋 任务: ${options.task.substring(0, 100)}${options.task.length > 100 ? '...' : ''}`);
+    logCaller(callerId, parentIsSubagent, `📋 当前活跃子代理数: ${this.getActiveCount()}/${this.maxConcurrent}`);
 
     // 检查并发限制
     if (this.getActiveCount() >= this.maxConcurrent) {
-      console.log(`${LOG_PREFIX} ❌ 并发限制: 已达上限 ${this.maxConcurrent}`);
+      logCaller(callerId, parentIsSubagent, `❌ 并发限制: 已达上限 ${this.maxConcurrent}`);
       throw new Error(`Maximum concurrent subagents reached (${this.maxConcurrent})`);
     }
 
     // 权限检查（如果有父 Agent）
     if (parentAgentId) {
       const canSpawn = this.registry.canSpawnSubagent(parentAgentId, agentId);
-      console.log(`${LOG_PREFIX} 🔐 权限检查: ${parentAgentId} → ${agentId} = ${canSpawn ? '✅ 允许' : '❌ 拒绝'}`);
+      logCaller(callerId, parentIsSubagent, `🔐 权限检查: ${parentAgentId} → ${agentId} = ${canSpawn ? '✅ 允许' : '❌ 拒绝'}`);
       if (!canSpawn) {
-        console.log(`${LOG_PREFIX} ❌ 权限拒绝: ${parentAgentId} 不允许创建 ${agentId}`);
+        logCaller(callerId, parentIsSubagent, `❌ 权限拒绝: ${parentAgentId} 不允许创建 ${agentId}`);
         throw new Error(
           `Agent '${parentAgentId}' is not allowed to spawn subagent of type '${agentId}'`
         );
@@ -135,17 +195,17 @@ export class SubagentManager {
     };
 
     this.subagents.set(id, info);
-    console.log(`${LOG_PREFIX} 🆔 子代理 ID: ${id}`);
-    console.log(`${LOG_PREFIX} 🆔 Session Key: ${sessionKey}`);
+    logCaller(callerId, parentIsSubagent, `🆔 子代理 ID: ${id}`);
+    logCaller(callerId, parentIsSubagent, `🆔 Session Key: ${sessionKey}`);
 
     // 通过 AgentRegistry 创建 Agent 实例
     try {
       const agentConfig = this.registry.getConfig(agentId);
-      console.log(`${LOG_PREFIX} 📦 Agent 配置: ${agentConfig?.name || agentId}, model=${agentConfig?.model || '默认'}`);
+      logCaller(callerId, parentIsSubagent, `📦 Agent 配置: ${agentConfig?.name || agentId}, model=${agentConfig?.model || '默认'}`);
       
       this.registry.getOrCreate(sessionKey, agentId);
-      console.log(`${LOG_PREFIX} ✅ Agent 实例创建成功`);
-      printDivider();
+      logCaller(callerId, parentIsSubagent, `✅ Agent 实例创建成功`);
+      logCallerDivider(callerId, parentIsSubagent);
     } catch (err) {
       // 创建失败，清理子代理信息
       this.subagents.delete(id);
@@ -190,11 +250,11 @@ export class SubagentManager {
     const startTime = Date.now();
 
     // ===== 日志：开始执行 =====
-    printDivider(`执行子代理 ${info.agentId}`);
-    console.log(`${LOG_PREFIX} 🆔 子代理 ID: ${subagentId}`);
-    console.log(`${LOG_PREFIX} 🆔 Session Key: ${info.sessionKey}`);
-    console.log(`${LOG_PREFIX} 📋 任务: ${info.task.substring(0, 100)}${info.task.length > 100 ? '...' : ''}`);
-    console.log(`${LOG_PREFIX} ⏱️ 超时: ${info.timeout}ms`);
+    logDivider(info.agentId, `执行子代理 ${info.agentId}`);
+    log(info.agentId, `🆔 子代理 ID: ${subagentId}`);
+    log(info.agentId, `🆔 Session Key: ${info.sessionKey}`);
+    log(info.agentId, `📋 任务: ${info.task.substring(0, 100)}${info.task.length > 100 ? '...' : ''}`);
+    log(info.agentId, `⏱️ 超时: ${info.timeout}ms`);
 
     try {
       // 获取 Agent 实例
@@ -202,17 +262,17 @@ export class SubagentManager {
       if (!agent) {
         throw new Error('Agent instance not found');
       }
-      console.log(`${LOG_PREFIX} ✅ 获取 Agent 实例成功`);
+      log(info.agentId, `✅ 获取 Agent 实例成功`);
 
       // 构建任务消息
       let taskMessage = info.task;
       if (info.skills && info.skills.length > 0) {
         taskMessage = `[Skills: ${info.skills.join(', ')}]\n\n${info.task}`;
-        console.log(`${LOG_PREFIX} 📦 注入技能: ${info.skills.join(', ')}`);
+        log(info.agentId, `📦 注入技能: ${info.skills.join(', ')}`);
       }
 
       // 调用 Agent 执行任务
-      console.log(`${LOG_PREFIX} 🚀 开始调用 Agent.chat()...`);
+      log(info.agentId, `🚀 开始调用 Agent.chat()...`);
       const response = await agent.chat(taskMessage);
 
       // 标记完成
@@ -222,10 +282,10 @@ export class SubagentManager {
       const duration = Date.now() - startTime;
 
       // ===== 日志：执行完成 =====
-      console.log(`${LOG_PREFIX} ✅ 执行成功`);
-      console.log(`${LOG_PREFIX} ⏱️ 耗时: ${duration}ms`);
-      console.log(`${LOG_PREFIX} 📝 结果长度: ${response.content.length} 字符`);
-      printDivider();
+      log(info.agentId, `✅ 执行成功`);
+      log(info.agentId, `⏱️ 耗时: ${duration}ms`);
+      log(info.agentId, `📝 结果长度: ${response.content.length} 字符`);
+      logDivider(info.agentId, );
 
       return {
         success: true,
@@ -244,9 +304,9 @@ export class SubagentManager {
       info.endedAt = new Date();
 
       // ===== 日志：执行失败 =====
-      console.log(`${LOG_PREFIX} ❌ 执行失败: ${errorMsg}`);
-      console.log(`${LOG_PREFIX} ⏱️ 耗时: ${duration}ms`);
-      printDivider();
+      log(info.agentId, `❌ 执行失败: ${errorMsg}`);
+      log(info.agentId, `⏱️ 耗时: ${duration}ms`);
+      logDivider(info.agentId, );
 
       return {
         success: false,

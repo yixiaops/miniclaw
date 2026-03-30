@@ -38,7 +38,8 @@ function createAgentFactory(
       systemPrompt: agentConfig?.systemPrompt,
       tools: [], // 先不传工具，后面单独注册
       agentId,
-      isSubagent: isSubagent || false
+      isSubagent: isSubagent || false,
+      thinkingLevel: agentConfig?.thinkingLevel || 'low'  // 默认 low 级别推理
     });
 
     // 如果指定了模型，切换模型
@@ -55,7 +56,8 @@ function createAgentFactory(
     agent.registerTool(createSessionsSpawnTool({
       manager: subagentManager,
       currentAgentId: agentId,
-      registry: _registry  // 传入 registry 以动态生成工具描述
+      registry: _registry,  // 传入 registry 以动态生成工具描述
+      isSubagent: isSubagent || false  // 传入身份信息用于日志
     }) as any);
     agent.registerTool(createSubagentsTool(subagentManager) as any);
 

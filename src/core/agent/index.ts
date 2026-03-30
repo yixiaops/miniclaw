@@ -52,6 +52,7 @@ import type { Config } from '../config.js';
  * @property tools - 初始工具列表，Agent 可以调用的工具
  * @property agentId - Agent 类型 ID（如 main、etf、policy）
  * @property isSubagent - 是否是子代理
+ * @property thinkingLevel - 思维链级别：'off' | 'low' | 'medium' | 'high'
  */
 export interface MiniclawAgentOptions {
   /** 系统提示词 */
@@ -62,6 +63,8 @@ export interface MiniclawAgentOptions {
   agentId?: string;
   /** 是否是子代理 */
   isSubagent?: boolean;
+  /** 思维链级别，默认 'low' */
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
 }
 
 /**
@@ -436,8 +439,8 @@ export class MiniclawAgent {
         model: createBailianModel(config),
         // 工具列表
         tools: initialTools,
-        // 思维链级别（关闭）
-        thinkingLevel: 'off',
+        // 思维链级别（显示推理过程）
+        thinkingLevel: options?.thinkingLevel || 'low',
         // 对话历史
         messages: [],
         // 是否正在流式输出
@@ -571,6 +574,15 @@ export class MiniclawAgent {
         fullContent += event.assistantMessageEvent.delta;
       }
       
+      // 推理增量事件：Agent 思考过程
+      if (event.type === 'thinking_update' || 
+          (event.type === 'message_update' && event.assistantMessageEvent?.type === 'thinking_delta')) {
+        const thinkingDelta = event.thinking || event.assistantMessageEvent?.delta || '';
+        if (thinkingDelta) {
+          this.log(`💭 推理: ${thinkingDelta.substring(0, 100)}${thinkingDelta.length > 100 ? '...' : ''}`);
+        }
+      }
+      
       // 工具调用事件：工具开始执行
       if (event.type === 'tool_execution_start') {
         toolCallCount++;
@@ -677,6 +689,21 @@ export class MiniclawAgent {
               content: event.assistantMessageEvent.delta,
               done: false
             });
+          }
+          // 推理增量事件
+          if (event.assistantMessageEvent?.type === 'thinking_delta') {
+            const thinkingDelta = event.assistantMessageEvent.delta || '';
+            if (thinkingDelta) {
+              this.log(`💭 推理: ${thinkingDelta.substring(0, 100)}${thinkingDelta.length > 100 ? '...' : ''}`);
+            }
+          }
+          break;
+          
+        // 推理更新事件
+        case 'thinking_update':
+          const thinking = event.thinking || '';
+          if (thinking) {
+            this.log(`💭 推理: ${thinking.substring(0, 100)}${thinking.length > 100 ? '...' : ''}`);
           }
           break;
 

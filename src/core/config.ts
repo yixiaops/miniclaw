@@ -56,6 +56,8 @@ export interface AgentConfig {
   systemPrompt?: string;
   /** 工作目录 */
   workspace?: string;
+  /** 思维链级别：'off' | 'low' | 'medium' | 'high' */
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
   /** 子代理配置 */
   subagents?: {
     /** 允许创建的子代理类型 */
