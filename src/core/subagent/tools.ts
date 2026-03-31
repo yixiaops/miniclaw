@@ -202,8 +202,14 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
           log(`   - 返回内容预览: ${(result.data || '').substring(0, 150)}${(result.data?.length || 0) > 150 ? '...' : ''}`);
           log(`📤 工具返回数据给 pi-agent-core...`);
           log(`══════════════════════════════════════════════════════`);
+          
+          // 🔴 修复：使用严格判断，空字符串也应该返回而不是替换为"任务执行成功"
+          const responseText = result.data !== undefined && result.data !== null 
+            ? result.data 
+            : '任务执行成功（无返回内容）';
+          
           return {
-            content: [{ type: 'text', text: result.data || '任务执行成功' }],
+            content: [{ type: 'text', text: responseText }],
             details: {
               subagentId: result.subagentId,
               sessionKey: info?.sessionKey ?? '',
