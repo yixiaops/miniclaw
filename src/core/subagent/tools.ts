@@ -137,7 +137,12 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
 
 **重要**：遇到专业领域问题，优先使用此工具委托给专家子代理，不要自己回答。
 
-返回执行结果。`;
+**执行流程**：
+1. 调用此工具创建子代理
+2. 子代理执行任务并返回结果
+3. **必须**：基于子代理返回的结果，整理、总结后回复用户
+
+返回：子代理的执行结果（文本内容）`;
 
   return {
     name: 'sessions_spawn',
