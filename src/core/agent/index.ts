@@ -283,8 +283,8 @@ function createBailianModel(config: Config) {
     provider: 'bailian',
     // API 基础 URL
     baseUrl: config.bailian.baseUrl,
-    // 是否支持推理模式（思维链）
-    reasoning: false,
+    // 是否支持推理模式（思维链）- 百炼支持但需要特殊处理
+    reasoning: false,  // 🔴 关键：百炼不支持 developer 角色，必须设为 false
     // 支持的输入类型
     input: ['text', 'image'] as ('text' | 'image')[],
     // 成本配置（百炼按实际计费，此处为占位）
@@ -301,6 +301,11 @@ function createBailianModel(config: Config) {
     // 请求头，包含认证信息
     headers: {
       'Authorization': `Bearer ${config.bailian.apiKey}`
+    },
+    // 百炼 API 兼容性配置
+    compat: {
+      supportsDeveloperRole: false,  // 百炼不支持 developer 角色
+      supportsReasoningEffort: false, // 百炼不支持 reasoning_effort 参数
     }
   };
 }
@@ -569,6 +574,9 @@ export class MiniclawAgent {
     // 订阅 Agent 事件
     // Agent 在处理过程中会发出多种事件
     const unsubscribe = this.agent.subscribe((event: any) => {
+      // 记录所有事件类型（调试用）
+      this.log(`📨 收到事件: ${event.type}`);
+      
       // 文本增量事件：大模型返回的文本片段
       if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
         fullContent += event.assistantMessageEvent.delta;
@@ -628,15 +636,52 @@ export class MiniclawAgent {
     const messages = this.agent.state.messages;
     const lastMessage = messages[messages.length - 1];
 
+    this.log(`📚 消息历史总数: ${messages.length}`);
+    messages.forEach((msg, i) => {
+      this.log(`📚   [${i}] role: ${msg.role}, content type: ${Array.isArray(msg.content) ? 'array' : typeof msg.content}`);
+      if (Array.isArray(msg.content)) {
+        this.log(`📚       内容部分数量: ${msg.content.length}`);
+      } else if (typeof msg.content === 'string') {
+        this.log(`📚       字符串长度: ${msg.content.length}`);
+      }
+    });
+
     if (lastMessage && lastMessage.role === 'assistant') {
       const content = lastMessage.content;
+      this.log(`📚 最后一条消息是 assistant，内容类型: ${Array.isArray(content) ? 'array' : typeof content}`);
+      
       if (Array.isArray(content)) {
+        // 打印所有内容部分
+        this.log(`📚 内容部分数量: ${content.length}`);
+        content.forEach((part, i) => {
+          this.log(`📚   [${i}] type: ${part.type}`);
+          if (part.type === 'text') {
+            this.log(`📚       text 长度: ${(part as any).text?.length || 0}`);
+          }
+          if (part.type === 'thinking') {
+            this.log(`📚       thinking 长度: ${(part as any).thinking?.length || 0}`);
+          }
+        });
+        
         const textContent = content.find(c => c.type === 'text');
+        const thinkingContent = content.find(c => c.type === 'thinking');
+        
+        // 如果有 thinking 内容但没有 text，尝试用 thinking
+        if (!textContent?.text && thinkingContent?.thinking) {
+          this.log(`📚 ⚠️ 没有 text 内容，但有 thinking 内容，使用 thinking`);
+          return { content: thinkingContent.thinking };
+        }
+        
+        if (content.length === 0) {
+          this.log(`📚 ⚠️ 内容数组为空！LLM 可能没有生成任何内容`);
+        }
+        
         return { content: textContent?.text || '' };
       }
       return { content: '' };
     }
 
+    this.log(`📚 ⚠️ 没有找到助手消息`);
     return { content: '' };
   }
 
