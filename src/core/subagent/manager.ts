@@ -285,6 +285,8 @@ export class SubagentManager {
       log(info.agentId, `✅ 执行成功`);
       log(info.agentId, `⏱️ 耗时: ${duration}ms`);
       log(info.agentId, `📝 结果长度: ${response.content.length} 字符`);
+      log(info.agentId, `📝 结果预览: ${response.content.substring(0, 200)}${response.content.length > 200 ? '...' : ''}`);
+      log(info.agentId, `📤 返回数据给主代理...`);
       logDivider(info.agentId, );
 
       return {

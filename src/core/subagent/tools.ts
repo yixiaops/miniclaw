@@ -198,6 +198,9 @@ export function createSessionsSpawnTool(options: SessionsSpawnToolOptions) {
           log(`✅ 子代理执行成功`);
           log(`   - subagentId: ${result.subagentId}`);
           log(`   - duration: ${result.duration}ms`);
+          log(`   - 返回内容长度: ${result.data?.length || 0} 字符`);
+          log(`   - 返回内容预览: ${(result.data || '').substring(0, 150)}${(result.data?.length || 0) > 150 ? '...' : ''}`);
+          log(`📤 工具返回数据给 pi-agent-core...`);
           log(`══════════════════════════════════════════════════════`);
           return {
             content: [{ type: 'text', text: result.data || '任务执行成功' }],
