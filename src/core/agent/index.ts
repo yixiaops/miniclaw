@@ -591,10 +591,19 @@ export class MiniclawAgent {
       
       // 工具调用事件：工具执行完成
       if (event.type === 'tool_execution_end') {
-        const resultPreview = typeof event.result === 'string' 
-          ? event.result.substring(0, 100) 
-          : JSON.stringify(event.result).substring(0, 100);
-        this.log(`✅ 工具结果 #${toolCallCount}: ${resultPreview}...`);
+        toolCallCount++;
+        let resultPreview: string;
+        if (event.result && event.result.content) {
+          // 工具返回格式: { content: [{ type: 'text', text: 'xxx' }] }
+          const textContent = event.result.content.find((c: any) => c.type === 'text');
+          resultPreview = textContent?.text?.substring(0, 150) || '[无文本内容]';
+        } else if (typeof event.result === 'string') {
+          resultPreview = event.result.substring(0, 150);
+        } else {
+          resultPreview = JSON.stringify(event.result).substring(0, 150);
+        }
+        this.log(`✅ 工具结果 #${toolCallCount}: ${resultPreview}${resultPreview.length >= 150 ? '...' : ''}`);
+        this.log(`📥 工具结果已加入消息历史，等待 LLM 生成回复...`);
       }
     });
 
