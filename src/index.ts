@@ -9,6 +9,7 @@ import { MiniclawGateway } from './core/gateway/index.js';
 import { loadConfig, type Config, type AgentConfig } from './core/config.js';
 import { SubagentManager } from './core/subagent/manager.js';
 import { createSessionsSpawnTool, createSubagentsTool } from './core/subagent/tools.js';
+import { createSkillManager } from './core/skill/index.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
@@ -95,6 +96,13 @@ async function main() {
   const config = loadConfig();
   console.log(`模型: ${config.bailian.model}`);
   console.log(`API: ${config.bailian.baseUrl}`);
+
+  // 初始化 SkillManager
+  console.log('初始化 SkillManager...');
+  const skillManager = createSkillManager({ autoLoad: true });
+  // 等待异步加载完成
+  await new Promise(r => setTimeout(r, 100));
+  console.log(`已加载 ${skillManager.count()} 个技能: ${skillManager.getNames().join(', ') || '(无)'}`);
 
   // 创建 AgentRegistry
   const registry = new AgentRegistry(config, () => {
