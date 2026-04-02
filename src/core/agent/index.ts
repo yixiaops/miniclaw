@@ -582,14 +582,14 @@ export class MiniclawAgent {
         fullContent += event.assistantMessageEvent.delta;
       }
       
-      // 推理增量事件：Agent 思考过程
-      if (event.type === 'thinking_update' || 
-          (event.type === 'message_update' && event.assistantMessageEvent?.type === 'thinking_delta')) {
-        const thinkingDelta = event.thinking || event.assistantMessageEvent?.delta || '';
-        if (thinkingDelta) {
-          this.log(`💭 推理: ${thinkingDelta.substring(0, 100)}${thinkingDelta.length > 100 ? '...' : ''}`);
-        }
-      }
+      // 推理增量事件：Agent 思考过程（已禁用日志）
+      // if (event.type === 'thinking_update' || 
+      //     (event.type === 'message_update' && event.assistantMessageEvent?.type === 'thinking_delta')) {
+      //   const thinkingDelta = event.thinking || event.assistantMessageEvent?.delta || '';
+      //   if (thinkingDelta) {
+      //     this.log(`💭 推理: ${thinkingDelta.substring(0, 100)}${thinkingDelta.length > 100 ? '...' : ''}`);
+      //   }
+      // }
       
       // 工具调用事件：工具开始执行
       if (event.type === 'tool_execution_start') {
@@ -658,9 +658,9 @@ export class MiniclawAgent {
           if (part.type === 'text') {
             this.log(`📚       text 长度: ${(part as any).text?.length || 0}`);
           }
-          if (part.type === 'thinking') {
-            this.log(`📚       thinking 长度: ${(part as any).thinking?.length || 0}`);
-          }
+          // if (part.type === 'thinking') {
+          //   this.log(`📚       thinking 长度: ${(part as any).thinking?.length || 0}`);
+          // }
         });
         
         const textContent = content.find(c => c.type === 'text');
@@ -668,7 +668,7 @@ export class MiniclawAgent {
         
         // 如果有 thinking 内容但没有 text，尝试用 thinking
         if (!textContent?.text && thinkingContent?.thinking) {
-          this.log(`📚 ⚠️ 没有 text 内容，但有 thinking 内容，使用 thinking`);
+          // this.log(`📚 ⚠️ 没有 text 内容，但有 thinking 内容，使用 thinking`);
           return { content: thinkingContent.thinking };
         }
         
@@ -744,22 +744,22 @@ export class MiniclawAgent {
               done: false
             });
           }
-          // 推理增量事件
-          if (event.assistantMessageEvent?.type === 'thinking_delta') {
-            const thinkingDelta = event.assistantMessageEvent.delta || '';
-            if (thinkingDelta) {
-              this.log(`💭 推理: ${thinkingDelta.substring(0, 100)}${thinkingDelta.length > 100 ? '...' : ''}`);
-            }
-          }
+          // 推理增量事件（已禁用日志）
+          // if (event.assistantMessageEvent?.type === 'thinking_delta') {
+          //   const thinkingDelta = event.assistantMessageEvent?.delta || '';
+          //   if (thinkingDelta) {
+          //     this.log(`💭 推理: ${thinkingDelta.substring(0, 100)}${thinkingDelta.length > 100 ? '...' : ''}`);
+          //   }
+          // }
           break;
           
-        // 推理更新事件
-        case 'thinking_update':
-          const thinking = event.thinking || '';
-          if (thinking) {
-            this.log(`💭 推理: ${thinking.substring(0, 100)}${thinking.length > 100 ? '...' : ''}`);
-          }
-          break;
+        // 推理更新事件（已禁用日志）
+        // case 'thinking_update':
+        //   const thinking = event.thinking || '';
+        //   if (thinking) {
+        //     this.log(`💭 推理: ${thinking.substring(0, 100)}${thinking.length > 100 ? '...' : ''}`);
+        //   }
+        //   break;
 
         // 工具执行开始事件
         // 当 Agent 决定调用工具时触发
