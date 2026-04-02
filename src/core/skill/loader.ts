@@ -234,15 +234,19 @@ export async function loadSkill(skillPath: string): Promise<LoadSkillResult> {
 export async function loadAllSkills(skillsDir: string): Promise<Skill[]> {
   const skills: Skill[] = [];
   
+  console.log(`[SkillLoader] Loading skills from: ${skillsDir}`);
+  
   // 确保目录存在
   if (!fs.existsSync(skillsDir)) {
     // 创建目录
+    console.log(`[SkillLoader] Directory not found, creating: ${skillsDir}`);
     await fs.promises.mkdir(skillsDir, { recursive: true });
     return skills;
   }
   
   // 读取目录内容
   const entries = await fs.promises.readdir(skillsDir, { withFileTypes: true });
+  console.log(`[SkillLoader] Found ${entries.filter(e => e.isDirectory()).length} skill directories`);
   
   // 遍历子目录
   for (const entry of entries) {
@@ -251,10 +255,15 @@ export async function loadAllSkills(skillsDir: string): Promise<Skill[]> {
     const skillDir = pathModule.join(skillsDir, entry.name);
     const skillFile = pathModule.join(skillDir, 'SKILL.md');
     
+    console.log(`[SkillLoader] Loading: ${entry.name}/SKILL.md`);
+    
     // 加载技能文件
     const result = await loadSkill(skillFile);
     if (result.success && result.skill) {
+      console.log(`[SkillLoader] ✅ Loaded: ${result.skill.name} (triggers: ${result.skill.triggers.join(', ')})`);
       skills.push(result.skill);
+    } else {
+      console.log(`[SkillLoader] ❌ Failed: ${result.error}`);
     }
   }
   
