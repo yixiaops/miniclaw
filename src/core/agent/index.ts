@@ -574,8 +574,8 @@ export class MiniclawAgent {
     // 订阅 Agent 事件
     // Agent 在处理过程中会发出多种事件
     const unsubscribe = this.agent.subscribe((event: any) => {
-      // 记录所有事件类型（调试用）
-      this.log(`📨 收到事件: ${event.type}`);
+      // 记录所有事件类型（调试用，已禁用）
+      // this.log(`📨 收到事件: ${event.type}`);
       
       // 文本增量事件：大模型返回的文本片段
       if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
