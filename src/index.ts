@@ -20,10 +20,12 @@ import { getBuiltinTools } from './tools/index.js';
  *
  * @param registry - Agent 注册表
  * @param subagentManager - 子代理管理器
+ * @param skillManager - 技能管理器
  */
 function createAgentFactory(
   _registry: AgentRegistry,
-  subagentManager: SubagentManager
+  subagentManager: SubagentManager,
+  skillManager: ReturnType<typeof createSkillManager>
 ) {
   return (
     sessionKey: string,
@@ -40,7 +42,8 @@ function createAgentFactory(
       tools: [], // 先不传工具，后面单独注册
       agentId,
       isSubagent: isSubagent || false,
-      thinkingLevel: agentConfig?.thinkingLevel || 'low'  // 默认 low 级别推理
+      thinkingLevel: agentConfig?.thinkingLevel || 'low',  // 默认 low 级别推理
+      skillManager  // 传递技能管理器
     });
 
     // 如果指定了模型，切换模型
@@ -124,7 +127,7 @@ async function main() {
   const subagentManager = new SubagentManager(subagentConfig, registry);
 
   // 创建 Agent 工厂函数
-  const createAgentFn = createAgentFactory(registry, subagentManager);
+  const createAgentFn = createAgentFactory(registry, subagentManager, skillManager);
 
   // 更新 Registry 的创建函数（使用任意键设置私有属性）
   (registry as any).createAgentFn = createAgentFn;

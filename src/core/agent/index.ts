@@ -38,6 +38,7 @@
 import { Agent, type AgentTool, type AgentMessage } from '@mariozechner/pi-agent-core';
 import { streamSimple } from '@mariozechner/pi-ai';
 import type { Config } from '../config.js';
+import type { SkillManager } from '../skill/index.js';
 
 // ============================================================================
 // 类型定义
@@ -65,6 +66,8 @@ export interface MiniclawAgentOptions {
   isSubagent?: boolean;
   /** 思维链级别，默认 'low' */
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
+  /** 技能管理器 */
+  skillManager?: SkillManager;
 }
 
 /**
@@ -373,6 +376,9 @@ export class MiniclawAgent {
   
   /** 是否是子代理 */
   private isSubagent: boolean;
+  
+  /** 技能管理器 */
+  private skillManager?: SkillManager;
 
   /**
    * 获取日志前缀
@@ -418,6 +424,7 @@ export class MiniclawAgent {
     this.agentId = options?.agentId || 'main';
     this.isSubagent = options?.isSubagent || false;
     this.currentModel = config.bailian.model;
+    this.skillManager = options?.skillManager;
 
     this.log(`初始化 Agent`);
     this.log(`模型: ${this.currentModel}`);
@@ -563,6 +570,25 @@ export class MiniclawAgent {
   async chat(input: string): Promise<{ content: string }> {
     this.log(`═════════════ 开始对话 ═════════════`);
     
+    // ===== 技能匹配 =====
+    let skillPrompt = '';
+    let originalSystemPrompt: string | null = null;
+    if (this.skillManager) {
+      const matchedSkill = this.skillManager.match(input);
+      if (matchedSkill) {
+        skillPrompt = this.skillManager.getPrompt(matchedSkill.name);
+        this.log(`🎯 匹配到技能: ${matchedSkill.name}`);
+      }
+    }
+    
+    // 如果匹配到技能，临时更新 system prompt
+    if (skillPrompt) {
+      originalSystemPrompt = this.agent.state.systemPrompt;
+      const fullPrompt = `${originalSystemPrompt}\n\n${skillPrompt}`;
+      this.agent.setSystemPrompt(fullPrompt);
+      this.log(`📋 已注入技能 prompt (${skillPrompt.length} 字符)`);
+    }
+    
     // ===== 发送前：打印上下文 =====
     this.logSendContext(input);
     
@@ -624,6 +650,12 @@ export class MiniclawAgent {
 
     // ===== 接收后：打印详情 =====
     this.logReceiveDetails(fullContent, toolCallCount, startTime);
+    
+    // ===== 恢复原始 system prompt =====
+    if (originalSystemPrompt) {
+      this.agent.setSystemPrompt(originalSystemPrompt);
+      this.log(`📋 已恢复原始 system prompt`);
+    }
     
     this.log(`═════════════ 对话结束 ═════════════\n`);
 
