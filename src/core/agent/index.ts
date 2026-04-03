@@ -744,6 +744,25 @@ export class MiniclawAgent {
   async *streamChat(input: string): AsyncGenerator<StreamChatEvent> {
     this.log(`═════════════ 开始流式对话 ═════════════`);
     
+    // ===== 技能匹配 =====
+    let skillPrompt = '';
+    let originalSystemPrompt: string | null = null;
+    if (this.skillManager) {
+      const matchedSkill = this.skillManager.match(input);
+      if (matchedSkill) {
+        skillPrompt = this.skillManager.getPrompt(matchedSkill.name);
+        this.log(`🎯 匹配到技能: ${matchedSkill.name}`);
+      }
+    }
+    
+    // 如果匹配到技能，临时更新 system prompt
+    if (skillPrompt) {
+      originalSystemPrompt = this.agent.state.systemPrompt;
+      const fullPrompt = `${originalSystemPrompt}\n\n${skillPrompt}`;
+      this.agent.setSystemPrompt(fullPrompt);
+      this.log(`📋 已注入技能 prompt (${skillPrompt.length} 字符)`);
+    }
+    
     // ===== 发送前：打印上下文 =====
     this.logSendContext(input);
     
@@ -897,6 +916,12 @@ export class MiniclawAgent {
 
     // 取消订阅
     unsubscribe();
+    
+    // ===== 恢复原始 system prompt =====
+    if (originalSystemPrompt) {
+      this.agent.setSystemPrompt(originalSystemPrompt);
+      this.log(`📋 已恢复原始 system prompt`);
+    }
     
     // 打印总结信息
     this.logReceiveDetails('[流式输出]', toolCallCount, startTime);
