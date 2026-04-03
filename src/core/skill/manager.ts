@@ -1,32 +1,39 @@
 /**
  * @fileoverview 技能管理器
- * 
+ *
  * 管理技能的加载、注册、匹配和检索
- * 
+ *
  * @module core/skill/manager
  */
 
 import type { Skill, SkillManagerConfig, SkillMatchResult, SkillSystemStatus } from './types.js';
-import { loadAllSkills, getDefaultSkillsDir } from './loader.js';
+import { loadAllSkillMetadatas, loadSkillContent, getDefaultSkillsDir } from './loader.js';
 import { SkillMatcher, createMatcher } from './matcher.js';
 
 /**
  * 技能管理器
- * 
+ *
  * 提供技能的加载、注册、匹配和检索功能
  */
 export class SkillManager {
   /** 技能存储 */
   private skills: Map<string, Skill> = new Map();
-  
+
   /** 技能目录 */
   private skillsDir: string;
-  
+
   /** 技能匹配器 */
   private matcher: SkillMatcher;
-  
+
   /** 是否已加载 */
   private loaded: boolean = false;
+
+  /**
+   * 日志输出
+   */
+  private log(message: string): void {
+    console.log(`[SkillManager] ${message}`);
+  }
 
   /**
    * 创建技能管理器
@@ -34,7 +41,7 @@ export class SkillManager {
   constructor(config: SkillManagerConfig = {}) {
     this.skillsDir = config.skillsDir ?? getDefaultSkillsDir();
     this.matcher = createMatcher();
-    
+
     // 自动加载
     if (config.autoLoad !== false) {
       this.loadAll().catch(err => {
@@ -44,23 +51,37 @@ export class SkillManager {
   }
 
   /**
-   * 加载所有技能
+   * 加载所有技能元数据(渐进式披露)
+   *
+   * 启动时只加载元数据,内容按需加载
    */
   async loadAll(): Promise<void> {
-    const skills = await loadAllSkills(this.skillsDir);
-    
+    const metadatas = await loadAllSkillMetadatas(this.skillsDir);
+
     this.skills.clear();
-    for (const skill of skills) {
+    for (const meta of metadatas) {
+      // 将元数据转换为 Skill 对象,标记 content 未加载
+      const skill: Skill = {
+        name: meta.name,
+        description: meta.description,
+        triggers: meta.triggers,
+        content: '',  // 空内容,首次使用时加载
+        path: meta.path,
+        homepage: meta.homepage,
+        metadata: meta.metadata,
+        priority: meta.priority,
+        contentLoaded: false  // 标记未加载
+      };
       this.skills.set(skill.name, skill);
     }
-    
+
     this.loaded = true;
-    console.log(`[SkillManager] Loaded ${skills.length} skills from ${this.skillsDir}`);
+    console.log(`[SkillManager] Loaded ${metadatas.length} skill metadatas from ${this.skillsDir}`);
   }
 
   /**
    * 手动注册技能
-   * 
+   *
    * @param skill 技能对象
    */
   register(skill: Skill): void {
@@ -69,7 +90,7 @@ export class SkillManager {
 
   /**
    * 注销技能
-   * 
+   *
    * @param name 技能名称
    */
   unregister(name: string): boolean {
@@ -78,9 +99,9 @@ export class SkillManager {
 
   /**
    * 获取技能
-   * 
+   *
    * @param name 技能名称
-   * @returns 技能对象，不存在返回 undefined
+   * @returns 技能对象,不存在返回 undefined
    */
   get(name: string): Skill | undefined {
     return this.skills.get(name);
@@ -102,9 +123,9 @@ export class SkillManager {
 
   /**
    * 匹配技能
-   * 
+   *
    * @param input 用户输入
-   * @returns 最佳匹配，无匹配返回 null
+   * @returns 最佳匹配,无匹配返回 null
    */
   match(input: string): Skill | null {
     const result = this.matcher.findBestMatch(this.getAll(), input);
@@ -112,10 +133,10 @@ export class SkillManager {
   }
 
   /**
-   * 匹配技能（带详细信息）
-   * 
+   * 匹配技能(带详细信息)
+   *
    * @param input 用户输入
-   * @returns 匹配结果，无匹配返回 null
+   * @returns 匹配结果,无匹配返回 null
    */
   matchWithDetails(input: string): SkillMatchResult | null {
     return this.matcher.findBestMatch(this.getAll(), input);
@@ -123,7 +144,7 @@ export class SkillManager {
 
   /**
    * 匹配所有相关技能
-   * 
+   *
    * @param input 用户输入
    * @returns 所有匹配结果
    */
@@ -132,19 +153,54 @@ export class SkillManager {
   }
 
   /**
-   * 获取技能的提示词内容
-   * 
-   * 用于注入到 Agent 的 system prompt 中
-   * 
+   * 加载技能内容(按需加载)
+   *
+   * 渐进式披露:首次访问时才从文件读取内容
+   *
    * @param skillName 技能名称
-   * @returns 格式化的技能内容，不存在返回空字符串
+   * @returns 是否成功加载
    */
-  getPrompt(skillName: string): string {
+  async loadContent(skillName: string): Promise<boolean> {
+    const skill = this.skills.get(skillName);
+    if (!skill) {
+      return false;
+    }
+
+    if (skill.contentLoaded) {
+      return true;  // 已加载,无需重复
+    }
+
+    try {
+      skill.content = await loadSkillContent(skill.path);
+      skill.contentLoaded = true;
+      this.log(`📋 按需加载内容: ${skillName} (${skill.content.length} 字符)`);
+      return true;
+    } catch (err) {
+      this.log(`❌ 加载内容失败: ${skillName} - ${err}`);
+      return false;
+    }
+  }
+
+  /**
+   * 获取技能的提示词内容
+   *
+   * 用于注入到 Agent 的 system prompt 中
+   * 渐进式披露:首次访问时按需加载内容
+   *
+   * @param skillName 技能名称
+   * @returns 格式化的技能内容,不存在返回空字符串
+   */
+  async getPrompt(skillName: string): Promise<string> {
     const skill = this.skills.get(skillName);
     if (!skill) {
       return '';
     }
-    
+
+    // 按需加载内容(渐进式披露)
+    if (!skill.contentLoaded) {
+      await this.loadContent(skillName);
+    }
+
     return `## Active Skill: ${skill.name}
 
 ${skill.content}`;
@@ -156,10 +212,10 @@ ${skill.content}`;
    * @param input 用户输入
    * @returns 格式化的技能内容，无匹配返回空字符串
    */
-  getBestMatchPrompt(input: string): string {
+  async getBestMatchPrompt(input: string): Promise<string> {
     const skill = this.match(input);
     if (!skill) {
-      return '';
+      return ''; 
     }
     return this.getPrompt(skill.name);
   }

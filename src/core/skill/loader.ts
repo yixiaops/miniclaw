@@ -8,7 +8,7 @@
 
 import * as fs from 'fs';
 import * as pathModule from 'path';
-import type { Skill, SkillMetadata, LoadSkillResult } from './types.js';
+import type { Skill, SkillMetadataLite, SkillMetadata, LoadSkillResult, LoadMetadataResult } from './types.js';
 
 /**
  * YAML frontmatter 解析正则
@@ -149,6 +149,142 @@ function parseValue(value: string): unknown {
   
   // 默认作为字符串
   return trimmed;
+}
+
+/**
+ * 加载单个技能的元数据（不加载内容）
+ * 
+ * 用于渐进式披露：启动时只加载元数据，内容按需加载
+ * 
+ * @param skillPath SKILL.md 文件路径
+ * @returns 加载结果
+ */
+export async function loadSkillMetadata(skillPath: string): Promise<LoadMetadataResult> {
+  try {
+    // 检查文件是否存在
+    if (!fs.existsSync(skillPath)) {
+      return {
+        success: false,
+        error: `Skill file not found: ${skillPath}`,
+        path: skillPath
+      };
+    }
+    
+    // 读取文件内容
+    const content = await fs.promises.readFile(skillPath, 'utf-8');
+    
+    // 解析 frontmatter
+    const { frontmatter } = parseFrontmatter(content);
+    
+    // 验证必填字段
+    const name = frontmatter.name as string | undefined;
+    const description = frontmatter.description as string | undefined;
+    
+    if (!name) {
+      return {
+        success: false,
+        error: `Missing required field 'name' in ${skillPath}`,
+        path: skillPath
+      };
+    }
+    
+    if (!description) {
+      return {
+        success: false,
+        error: `Missing required field 'description' in ${skillPath}`,
+        path: skillPath
+      };
+    }
+    
+    // 提取触发词
+    const triggers = extractTriggers(description);
+    
+    // 构建轻量元数据对象（不含 content）
+    const metadata: SkillMetadataLite = {
+      name,
+      description,
+      triggers,
+      path: skillPath,
+      homepage: frontmatter.homepage as string | undefined,
+      metadata: frontmatter.metadata as SkillMetadata | undefined,
+      priority: (frontmatter.metadata as SkillMetadata | undefined)?.priority ?? 0
+    };
+    
+    return {
+      success: true,
+      metadata,
+      path: skillPath
+    };
+    
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      error: `Failed to load skill metadata: ${error}`,
+      path: skillPath
+    };
+  }
+}
+
+/**
+ * 扫描目录并加载所有技能元数据（不加载内容）
+ * 
+ * 用于渐进式披露：启动时快速加载，内容按需加载
+ * 
+ * @param skillsDir 技能目录
+ * @returns 加载的元数据数组
+ */
+export async function loadAllSkillMetadatas(skillsDir: string): Promise<SkillMetadataLite[]> {
+  const metadatas: SkillMetadataLite[] = []; 
+  
+  console.log(`[SkillLoader] Loading skill metadatas from: ${skillsDir}`);
+  
+  // 确保目录存在
+  if (!fs.existsSync(skillsDir)) {
+    // 创建目录
+    console.log(`[SkillLoader] Directory not found, creating: ${skillsDir}`);
+    await fs.promises.mkdir(skillsDir, { recursive: true });
+    return metadatas;
+  }
+  
+  // 读取目录内容
+  const entries = await fs.promises.readdir(skillsDir, { withFileTypes: true });
+  console.log(`[SkillLoader] Found ${entries.filter(e => e.isDirectory()).length} skill directories`);
+  
+  // 遍历子目录
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    
+    const skillDir = pathModule.join(skillsDir, entry.name);
+    const skillFile = pathModule.join(skillDir, 'SKILL.md');
+    
+    console.log(`[SkillLoader] Loading metadata: ${entry.name}/SKILL.md`);
+    
+    // 加载技能元数据
+    const result = await loadSkillMetadata(skillFile);
+    if (result.success && result.metadata) {
+      console.log(`[SkillLoader] ✅ Loaded metadata: ${result.metadata.name} (triggers: ${result.metadata.triggers.join(', ')})`);
+      metadatas.push(result.metadata);
+    } else {
+      console.log(`[SkillLoader] ❌ Failed: ${result.error}`);
+    }
+  }
+  
+  return metadatas;
+}
+
+/**
+ * 加载技能内容（从文件读取 body）
+ * 
+ * 用于渐进式披露：首次访问时才加载内容
+ * 
+ * @param skillPath SKILL.md 文件路径
+ * @returns 技能内容（Markdown 正文）
+ */
+export async function loadSkillContent(skillPath: string): Promise<string> {
+  const content = await fs.promises.readFile(skillPath, 'utf-8');
+  const { body } = parseFrontmatter(content);
+  return body;
 }
 
 /**
