@@ -120,31 +120,31 @@ describe('SkillManager', () => {
   });
 
   describe('getPrompt', () => {
-    it('should generate prompt for skill', () => {
+    it('should generate prompt for skill', async () => {
       manager.register(testSkill);
-      const prompt = manager.getPrompt('test');
-      
+      const prompt = await manager.getPrompt('test');
+
       expect(prompt).toContain('## Active Skill: test');
       expect(prompt).toContain('# Test Skill');
     });
 
-    it('should return empty string for non-existent skill', () => {
-      const prompt = manager.getPrompt('nonexistent');
+    it('should return empty string for non-existent skill', async () => {
+      const prompt = await manager.getPrompt('nonexistent');
       expect(prompt).toBe('');
     });
   });
 
   describe('getBestMatchPrompt', () => {
-    it('should return prompt for matched skill', () => {
+    it('should return prompt for matched skill', async () => {
       manager.register(testSkill);
-      const prompt = manager.getBestMatchPrompt('测试一下');
-      
+      const prompt = await manager.getBestMatchPrompt('测试一下');
+
       expect(prompt).toContain('## Active Skill: test');
     });
 
-    it('should return empty string for no match', () => {
+    it('should return empty string for no match', async () => {
       manager.register(testSkill);
-      const prompt = manager.getBestMatchPrompt('买个咖啡');
+      const prompt = await manager.getBestMatchPrompt('买个咖啡');
       expect(prompt).toBe('');
     });
   });

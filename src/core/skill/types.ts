@@ -7,7 +7,7 @@
  */
 
 /**
- * 技能元数据
+ * 技能元数据（依赖信息）
  */
 export interface SkillMetadata {
   /** 依赖的工具列表 */
@@ -18,6 +18,28 @@ export interface SkillMetadata {
   env?: string[];
   /** 优先级（数值越高越优先），默认为 0 */
   priority?: number;
+}
+
+/**
+ * 技能轻量元数据（用于启动时快速加载）
+ * 
+ * 只包含匹配和排序所需的字段，不包含完整内容
+ */
+export interface SkillMetadataLite {
+  /** 技能名称 */
+  name: string;
+  /** 技能描述 */
+  description: string;
+  /** 触发词数组（从 description 提取） */
+  triggers: string[];
+  /** 技能文件路径 */
+  path: string;
+  /** 优先级 */
+  priority: number;
+  /** 相关链接 */
+  homepage?: string;
+  /** 元数据（依赖信息） */
+  metadata?: SkillMetadata;
 }
 
 /**
@@ -38,6 +60,7 @@ export interface SkillFrontmatter {
  * 技能对象
  * 
  * 表示一个已加载的技能，包含元数据和内容
+ * 采用渐进式披露：content 可能在首次访问时才加载
  */
 export interface Skill {
   /** 技能名称 */
@@ -56,6 +79,8 @@ export interface Skill {
   metadata?: SkillMetadata;
   /** 优先级 */
   priority: number;
+  /** 内容是否已加载（渐进式披露标记） */
+  contentLoaded?: boolean;
 }
 
 /**
@@ -95,6 +120,20 @@ export interface LoadSkillResult {
 }
 
 /**
+ * 加载技能元数据的结果
+ */
+export interface LoadMetadataResult {
+  /** 是否成功 */
+  success: boolean;
+  /** 加载的元数据（成功时） */
+  metadata?: SkillMetadataLite;
+  /** 错误信息（失败时） */
+  error?: string;
+  /** 文件路径 */
+  path: string;
+}
+
+/**
  * 技能系统状态
  */
 export interface SkillSystemStatus {
@@ -104,4 +143,6 @@ export interface SkillSystemStatus {
   skillNames: string[];
   /** 技能目录路径 */
   skillsDir: string;
+  /** 已加载内容的技能数量 */
+  contentLoadedCount?: number;
 }
