@@ -38,7 +38,7 @@
 import { Agent, type AgentTool, type AgentMessage } from '@mariozechner/pi-agent-core';
 import { streamSimple } from '@mariozechner/pi-ai';
 import type { Config } from '../config.js';
-import type { SkillManager } from '../skill/index.js';
+import type { PiSkillManager } from '../skill/index.js';
 
 // ============================================================================
 // 类型定义
@@ -66,8 +66,8 @@ export interface MiniclawAgentOptions {
   isSubagent?: boolean;
   /** 思维链级别,默认 'low' */
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
-  /** 技能管理器 */
-  skillManager?: SkillManager;
+  /** 技能管理器（可选） */
+  skillManager?: PiSkillManager;
 }
 
 /**
@@ -377,8 +377,8 @@ export class MiniclawAgent {
   /** 是否是子代理 */
   private isSubagent: boolean;
 
-  /** 技能管理器 */
-  private skillManager?: SkillManager;
+  /** 技能管理器（可选） */
+  private skillManager?: PiSkillManager;
 
   /**
    * 获取日志前缀
@@ -573,15 +573,17 @@ export class MiniclawAgent {
     // ===== 技能匹配 =====
     let skillPrompt = '';
     let originalSystemPrompt: string | null = null;
+
     if (this.skillManager) {
       const matchedSkill = this.skillManager.match(input);
       if (matchedSkill) {
-        skillPrompt = await this.skillManager.getPrompt(matchedSkill.name);
-        this.log(`🎯 匹配到技能: ${matchedSkill.name}`);
+        skillPrompt = this.skillManager.getPrompt(matchedSkill.skill);
+        this.log(`🎯 匹配到技能: ${matchedSkill.skill.name} (${matchedSkill.matchType})`);
+        this.log(`   匹配关键词: ${matchedSkill.matchedKeyword}`);
       }
     }
 
-    // 如果匹配到技能,临时更新 system prompt
+    // 如果匹配到技能，临时更新 system prompt
     if (skillPrompt) {
       originalSystemPrompt = this.agent.state.systemPrompt;
       const fullPrompt = `${originalSystemPrompt}\n\n${skillPrompt}`;
@@ -743,19 +745,21 @@ export class MiniclawAgent {
    */
   async *streamChat(input: string): AsyncGenerator<StreamChatEvent> {
     this.log(`═════════════ 开始流式对话 ═════════════`);
-    
+
     // ===== 技能匹配 =====
-    let skillPrompt = ''; 
+    let skillPrompt = '';
     let originalSystemPrompt: string | null = null;
+
     if (this.skillManager) {
       const matchedSkill = this.skillManager.match(input);
       if (matchedSkill) {
-        skillPrompt = await this.skillManager.getPrompt(matchedSkill.name);
-        this.log(`🎯 匹配到技能: ${matchedSkill.name}`);
+        skillPrompt = this.skillManager.getPrompt(matchedSkill.skill);
+        this.log(`🎯 匹配到技能: ${matchedSkill.skill.name} (${matchedSkill.matchType})`);
+        this.log(`   匹配关键词: ${matchedSkill.matchedKeyword}`);
       }
     }
 
-    // 如果匹配到技能,临时更新 system prompt
+    // 如果匹配到技能，临时更新 system prompt
     if (skillPrompt) {
       originalSystemPrompt = this.agent.state.systemPrompt;
       const fullPrompt = `${originalSystemPrompt}\n\n${skillPrompt}`;
