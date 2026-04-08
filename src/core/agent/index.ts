@@ -1073,8 +1073,8 @@ export class MiniclawAgent {
     // 打印系统提示词
     const systemPrompt = this.agent.state.systemPrompt;
     this.log(`📋 系统提示词 (${systemPrompt.length} 字符, ~${estimateTokens(systemPrompt)} tokens):`);
-    const promptPreview = systemPrompt.length > 150
-      ? systemPrompt.substring(0, 150) + '...'
+    const promptPreview = systemPrompt.length > 500
+      ? systemPrompt.substring(0, 500) + '...'
       : systemPrompt;
     this.log(`  ${promptPreview.replace(/\n/g, '\n   ')}`);
 
