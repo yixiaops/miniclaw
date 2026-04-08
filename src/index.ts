@@ -9,7 +9,7 @@ import { MiniclawGateway } from './core/gateway/index.js';
 import { loadConfig, type Config, type AgentConfig } from './core/config.js';
 import { SubagentManager } from './core/subagent/manager.js';
 import { createSessionsSpawnTool, createSubagentsTool } from './core/subagent/tools.js';
-import { createSkillManager } from './core/skill/index.js';
+import { createPiSkillManager, type PiSkillManager } from './core/skill/index.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
@@ -20,12 +20,12 @@ import { getBuiltinTools } from './tools/index.js';
  *
  * @param registry - Agent 注册表
  * @param subagentManager - 子代理管理器
- * @param skillManager - 技能管理器
+ * @param skillManager - 技能管理器（可选）
  */
 function createAgentFactory(
   _registry: AgentRegistry,
   subagentManager: SubagentManager,
-  skillManager: ReturnType<typeof createSkillManager>
+  skillManager?: PiSkillManager
 ) {
   return (
     sessionKey: string,
@@ -100,12 +100,35 @@ async function main() {
   console.log(`模型: ${config.bailian.model}`);
   console.log(`API: ${config.bailian.baseUrl}`);
 
-  // 初始化 SkillManager
-  console.log('初始化 SkillManager...');
-  const skillManager = createSkillManager({ autoLoad: true });
-  // 等待异步加载完成
-  await new Promise(r => setTimeout(r, 100));
-  console.log(`已加载 ${skillManager.count()} 个技能: ${skillManager.getNames().join(', ') || '(无)'}`);
+  // 初始化 PiSkillManager
+  let skillManager: PiSkillManager | undefined;
+  const skillsEnabled = config.skills?.enabled ?? true;
+
+  if (skillsEnabled) {
+    console.log('\n初始化 SkillManager...');
+    skillManager = createPiSkillManager({
+      skillsDir: config.skills?.dir,
+      enabled: true
+    });
+
+    // 加载技能
+    const result = skillManager.load();
+    const skillCount = result.skills.length;
+
+    if (skillCount > 0) {
+      const names = result.skills.map(s => s.name).join(', ');
+      console.log(`已加载 ${skillCount} 个技能: ${names}`);
+    } else {
+      console.log('未加载任何技能（技能目录可能为空或不存在）');
+    }
+
+    // 显示诊断信息
+    if (result.diagnostics.length > 0) {
+      console.warn(`技能加载警告: ${result.diagnostics.length} 条`);
+    }
+  } else {
+    console.log('\n技能系统已禁用');
+  }
 
   // 创建 AgentRegistry
   const registry = new AgentRegistry(config, () => {

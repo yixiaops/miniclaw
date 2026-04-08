@@ -100,6 +100,16 @@ export interface AgentsConfig {
 }
 
 /**
+ * 技能配置
+ */
+export interface SkillsConfig {
+  /** 技能目录路径，默认 ~/.miniclaw/skills */
+  dir?: string;
+  /** 是否启用技能系统，默认 true */
+  enabled?: boolean;
+}
+
+/**
  * 应用配置
  */
 export interface Config {
@@ -111,6 +121,8 @@ export interface Config {
   feishu?: FeishuConfig;
   /** Agents 配置（可选） */
   agents?: AgentsConfig;
+  /** 技能配置（可选） */
+  skills?: SkillsConfig;
 }
 
 /**
@@ -161,7 +173,18 @@ export function loadConfig(): Config {
     };
   }
 
-  // 加载 config.json 中的 agents 配置
+  // 加载技能配置
+  const skillsDir = process.env.MINICLAW_SKILLS_DIR;
+  const skillsEnabled = process.env.MINICLAW_SKILLS_ENABLED;
+
+  if (skillsDir || skillsEnabled) {
+    config.skills = {
+      dir: skillsDir,
+      enabled: skillsEnabled ? skillsEnabled === 'true' : true
+    };
+  }
+
+  // 加载 config.json 中的 agents 和 skills 配置
   const configPath = getConfigPath();
   if (existsSync(configPath)) {
     try {
@@ -171,6 +194,11 @@ export function loadConfig(): Config {
       if (jsonConfig.agents) {
         config.agents = jsonConfig.agents;
         console.log(`[Config] 从 ${configPath} 加载了 ${jsonConfig.agents.list?.length || 0} 个 Agent 配置`);
+      }
+
+      if (jsonConfig.skills) {
+        config.skills = jsonConfig.skills;
+        console.log(`[Config] 从 ${configPath} 加载了技能配置: dir=${jsonConfig.skills.dir || '(默认)'}, enabled=${jsonConfig.skills.enabled ?? true}`);
       }
     } catch (err) {
       console.warn(`[Config] 加载 ${configPath} 失败:`, err instanceof Error ? err.message : err);
