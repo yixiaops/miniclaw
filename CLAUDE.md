@@ -115,6 +115,59 @@ MINICLAW_BAILIAN_BASE_URL=https://...  # Default: Alibaba Cloud
 MINICLAW_SERVER_PORT=3000             # Default: 3000
 MINICLAW_FEISHU_APP_ID=...            # Optional: for Feishu channel
 MINICLAW_FEISHU_APP_SECRET=...
+
+# Skills configuration
+MINICLAW_SKILLS_DIR=~/.miniclaw/skills  # Skills directory (default: ~/.miniclaw/skills)
+MINICLAW_SKILLS_ENABLED=true            # Enable/disable skills (default: true)
+```
+
+### Skills System
+
+Miniclaw uses [@mariozechner/pi-coding-agent](https://github.com/MarcusShoke/pi-coding-agent) for skill loading and formatting.
+
+#### Skill File Format
+
+Skills are markdown files with YAML frontmatter:
+
+```markdown
+---
+name: my-skill
+description: Skill description with triggers [trigger1] [trigger2]
+---
+
+## Skill Instructions
+
+Your skill content here...
+```
+
+- **name**: Skill identifier (required)
+- **description**: Description with optional triggers in brackets (required)
+- **Triggers**: Words wrapped in `[]` used for matching user input
+
+#### Skill Loading
+
+1. Skills are loaded at startup from `~/.miniclaw/skills/` (configurable)
+2. Each `.md` file or `SKILL.md` in subdirectories is loaded
+3. Skills are matched based on triggers extracted from description
+4. Matched skill prompts are injected into Agent's system prompt
+
+#### Example
+
+```bash
+# Create a skill
+cat > ~/.miniclaw/skills/git.md << 'EOF'
+---
+name: git-helper
+description: Git operations helper [git] [commit] [push] [pull]
+---
+
+## Git Helper
+
+When user asks about git operations, provide helpful commands and explanations.
+EOF
+
+# The skill will be loaded on next startup
+# Trigger: "help me commit" → matches git-helper skill
 ```
 
 ## Code Style
@@ -127,6 +180,8 @@ MINICLAW_FEISHU_APP_SECRET=...
 ## Active Technologies
 - TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架) (002-improve-test-coverage)
 - SimpleMemoryStorage (内存存储，可选文件持久化) (002-improve-test-coverage)
+- @mariozechner/pi-coding-agent (^0.65.2) for skill loading/formatting (010-pi-skill-integration)
 
 ## Recent Changes
+- 010-pi-skill-integration: Integrated pi-coding-agent Skill API for skill loading, matching, and prompt injection
 - 002-improve-test-coverage: Added TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)
