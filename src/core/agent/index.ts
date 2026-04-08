@@ -582,28 +582,6 @@ export class MiniclawAgent {
   async chat(input: string): Promise<{ content: string }> {
     this.log(`═════════════ 开始对话 ═════════════`);
 
-    // ===== 技能匹配 =====
-    let skillContent = '';
-    let originalSystemPrompt: string | null = null;
-
-    if (this.skillManager) {
-      const matchedSkill = this.skillManager.match(input);
-      if (matchedSkill) {
-        // 获取技能完整内容（读取 SKILL.md 文件）
-        skillContent = await this.skillManager.getSkillContent(matchedSkill.skill);
-        this.log(`🎯 匹配到技能: ${matchedSkill.skill.name} (${matchedSkill.matchType})`);
-        this.log(`   匹配关键词: ${matchedSkill.matchedKeyword}`);
-      }
-    }
-
-    // 如果匹配到技能，临时更新 system prompt
-    if (skillContent) {
-      originalSystemPrompt = this.agent.state.systemPrompt;
-      const fullPrompt = `${originalSystemPrompt}\n\n${skillContent}`;
-      this.agent.setSystemPrompt(fullPrompt);
-      this.log(`📋 已注入技能完整内容 (${skillContent.length} 字符)`);
-    }
-
     // ===== 发送前:打印上下文 =====
     this.logSendContext(input);
 
@@ -665,12 +643,6 @@ export class MiniclawAgent {
 
     // ===== 接收后:打印详情 =====
     this.logReceiveDetails(fullContent, toolCallCount, startTime);
-
-    // ===== 恢复原始 system prompt =====
-    if (originalSystemPrompt) {
-      this.agent.setSystemPrompt(originalSystemPrompt);
-      this.log(`📋 已恢复原始 system prompt`);
-    }
 
     this.log(`═════════════ 对话结束 ═════════════\n`);
 
@@ -758,28 +730,6 @@ export class MiniclawAgent {
    */
   async *streamChat(input: string): AsyncGenerator<StreamChatEvent> {
     this.log(`═════════════ 开始流式对话 ═════════════`);
-
-    // ===== 技能匹配 =====
-    let skillContent = '';
-    let originalSystemPrompt: string | null = null;
-
-    if (this.skillManager) {
-      const matchedSkill = this.skillManager.match(input);
-      if (matchedSkill) {
-        // 获取技能完整内容（读取 SKILL.md 文件）
-        skillContent = await this.skillManager.getSkillContent(matchedSkill.skill);
-        this.log(`🎯 匹配到技能: ${matchedSkill.skill.name} (${matchedSkill.matchType})`);
-        this.log(`   匹配关键词: ${matchedSkill.matchedKeyword}`);
-      }
-    }
-
-    // 如果匹配到技能，临时更新 system prompt
-    if (skillContent) {
-      originalSystemPrompt = this.agent.state.systemPrompt;
-      const fullPrompt = `${originalSystemPrompt}\n\n${skillContent}`;
-      this.agent.setSystemPrompt(fullPrompt);
-      this.log(`📋 已注入技能完整内容 (${skillContent.length} 字符)`);
-    }
 
     // ===== 发送前:打印上下文 =====
     this.logSendContext(input);
@@ -934,12 +884,6 @@ export class MiniclawAgent {
 
     // 取消订阅
     unsubscribe();
-
-    // ===== 恢复原始 system prompt =====
-    if (originalSystemPrompt) {
-      this.agent.setSystemPrompt(originalSystemPrompt);
-      this.log(`📋 已恢复原始 system prompt`);
-    }
 
     // 打印总结信息
     this.logReceiveDetails('[流式输出]', toolCallCount, startTime);
