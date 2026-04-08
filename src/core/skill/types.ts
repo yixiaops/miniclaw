@@ -3,6 +3,8 @@
  * 
  * 定义技能、技能管理器配置、匹配结果等核心类型
  * 
+ * 注意：部分类型被 PiSkillManager 使用，部分仅为旧版 SkillManager 定义
+ *
  * @module core/skill/types
  */
 

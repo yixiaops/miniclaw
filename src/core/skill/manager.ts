@@ -1,6 +1,11 @@
 /**
  * @fileoverview 技能管理器
  *
+ * @deprecated 已废弃，请使用 PiSkillManager（基于 pi-coding-agent）
+ * 
+ * 此文件保留供参考，新项目应使用 pi-manager.ts 中的 PiSkillManager。
+ * PiSkillManager 提供更好的兼容性和更简洁的 API。
+ *
  * 管理技能的加载、注册、匹配和检索
  *
  * @module core/skill/manager
