@@ -441,12 +441,24 @@ export class MiniclawAgent {
       });
     }
 
+    // 构建系统提示词（注入 skill 元数据）
+    let systemPrompt = options?.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    
+    // 启动时注入所有 skill 的元数据
+    if (this.skillManager) {
+      const skillPrompts = this.skillManager.getAllPrompts();
+      if (skillPrompts) {
+        systemPrompt = `${systemPrompt}\n\n${skillPrompts}`;
+        this.log(`📋 已注入 ${this.skillManager.count()} 个技能元数据`);
+      }
+    }
+
     // 创建 Agent 实例
     // Agent 构造函数接收初始状态和流式处理函数
     this.agent = new Agent({
       initialState: {
         // 系统提示词,定义 Agent 的角色和行为
-        systemPrompt: options?.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+        systemPrompt: systemPrompt,
         // 模型配置
         model: createBailianModel(config),
         // 工具列表
@@ -571,24 +583,25 @@ export class MiniclawAgent {
     this.log(`═════════════ 开始对话 ═════════════`);
 
     // ===== 技能匹配 =====
-    let skillPrompt = '';
+    let skillContent = '';
     let originalSystemPrompt: string | null = null;
 
     if (this.skillManager) {
       const matchedSkill = this.skillManager.match(input);
       if (matchedSkill) {
-        skillPrompt = this.skillManager.getPrompt(matchedSkill.skill);
+        // 获取技能完整内容（读取 SKILL.md 文件）
+        skillContent = await this.skillManager.getSkillContent(matchedSkill.skill);
         this.log(`🎯 匹配到技能: ${matchedSkill.skill.name} (${matchedSkill.matchType})`);
         this.log(`   匹配关键词: ${matchedSkill.matchedKeyword}`);
       }
     }
 
     // 如果匹配到技能，临时更新 system prompt
-    if (skillPrompt) {
+    if (skillContent) {
       originalSystemPrompt = this.agent.state.systemPrompt;
-      const fullPrompt = `${originalSystemPrompt}\n\n${skillPrompt}`;
+      const fullPrompt = `${originalSystemPrompt}\n\n${skillContent}`;
       this.agent.setSystemPrompt(fullPrompt);
-      this.log(`📋 已注入技能 prompt (${skillPrompt.length} 字符)`);
+      this.log(`📋 已注入技能完整内容 (${skillContent.length} 字符)`);
     }
 
     // ===== 发送前:打印上下文 =====
@@ -747,24 +760,25 @@ export class MiniclawAgent {
     this.log(`═════════════ 开始流式对话 ═════════════`);
 
     // ===== 技能匹配 =====
-    let skillPrompt = '';
+    let skillContent = '';
     let originalSystemPrompt: string | null = null;
 
     if (this.skillManager) {
       const matchedSkill = this.skillManager.match(input);
       if (matchedSkill) {
-        skillPrompt = this.skillManager.getPrompt(matchedSkill.skill);
+        // 获取技能完整内容（读取 SKILL.md 文件）
+        skillContent = await this.skillManager.getSkillContent(matchedSkill.skill);
         this.log(`🎯 匹配到技能: ${matchedSkill.skill.name} (${matchedSkill.matchType})`);
         this.log(`   匹配关键词: ${matchedSkill.matchedKeyword}`);
       }
     }
 
     // 如果匹配到技能，临时更新 system prompt
-    if (skillPrompt) {
+    if (skillContent) {
       originalSystemPrompt = this.agent.state.systemPrompt;
-      const fullPrompt = `${originalSystemPrompt}\n\n${skillPrompt}`;
+      const fullPrompt = `${originalSystemPrompt}\n\n${skillContent}`;
       this.agent.setSystemPrompt(fullPrompt);
-      this.log(`📋 已注入技能 prompt (${skillPrompt.length} 字符)`);
+      this.log(`📋 已注入技能完整内容 (${skillContent.length} 字符)`);
     }
 
     // ===== 发送前:打印上下文 =====

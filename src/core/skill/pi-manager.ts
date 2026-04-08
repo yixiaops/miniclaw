@@ -262,9 +262,10 @@ export class PiSkillManager {
   }
 
   /**
-   * 获取技能的 prompt 文本
+   * 获取技能的 prompt 文本（仅元数据）
    *
    * 使用 formatSkillsForPrompt 格式化单个技能。
+   * 注意：这只是元数据格式，用于启动时注入。
    *
    * @param skill - 技能对象
    * @returns 格式化的 prompt 文本
@@ -276,6 +277,36 @@ export class PiSkillManager {
 
     console.log(`[PiSkillManager] 📋 生成技能 prompt (${prompt.length} 字符)`);
     return prompt;
+  }
+
+  /**
+   * 获取技能的完整内容（读取 SKILL.md 文件）
+   *
+   * 用于匹配到技能后注入完整指令。
+   *
+   * @param skill - 技能对象
+   * @returns 格式化的技能内容
+   */
+  async getSkillContent(skill: PiSkill): Promise<string> {
+    const { readFile } = await import('fs/promises');
+    
+    try {
+      const content = await readFile(skill.filePath, 'utf-8');
+      
+      // 解析 frontmatter，提取正文
+      const match = content.match(/^---\s*\n[\s\S]*?\n---\s*\n([\s\S]*)$/);
+      const body = match ? match[1].trim() : content;
+      
+      const formatted = `## Active Skill: ${skill.name}
+
+${body}`;
+      
+      console.log(`[PiSkillManager] 📄 读取技能内容: ${skill.name} (${formatted.length} 字符)`);
+      return formatted;
+    } catch (err) {
+      console.warn(`[PiSkillManager] ⚠️ 读取技能内容失败: ${skill.name} - ${err}`);
+      return '';
+    }
   }
 
   /**
