@@ -1,8 +1,13 @@
 /**
  * @fileoverview 技能加载器
  * 
- * 负责从 SKILL.md 文件加载技能，解析 YAML frontmatter
+ * @deprecated 已废弃，pi-coding-agent 内置加载能力
  * 
+ * 此文件保留供参考，新项目应使用 PiSkillManager 和 pi-coding-agent 的 API。
+ * pi-coding-agent 提供了更标准的 loadSkillsFromDir() 和 formatSkillsForPrompt() 方法。
+ * 
+ * 负责从 SKILL.md 文件加载技能，解析 YAML frontmatter
+ *
  * @module core/skill/loader
  */
 
