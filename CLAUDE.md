@@ -181,6 +181,8 @@ EOF
 - TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架) (002-improve-test-coverage)
 - SimpleMemoryStorage (内存存储，可选文件持久化) (002-improve-test-coverage)
 - @mariozechner/pi-coding-agent (^0.65.2) for skill loading/formatting (010-pi-skill-integration)
+- TypeScript 5.9.3, Node.js >=18 + @mariozechner/pi-coding-agent v0.65.2 (provides `loadSkillsFromDir`, `formatSkillsForPrompt`), express v5.2.1, socket.io v4.8.3 (011-skill-lazy-loading)
+- File system - skills stored in ~/.miniclaw/skills/ directory as SKILL.md files (011-skill-lazy-loading)
 
 ## Recent Changes
 - 010-pi-skill-integration: Integrated pi-coding-agent Skill API for skill loading, matching, and prompt injection
