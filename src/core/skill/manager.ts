@@ -250,10 +250,14 @@ ${skill.content}`;
    * 获取系统状态
    */
   getStatus(): SkillSystemStatus {
+    const skills = Array.from(this.skills.values());
+    const contentLoadedCount = skills.filter(s => s.contentLoaded).length;
+    
     return {
       skillCount: this.skills.size,
       skillNames: Array.from(this.skills.keys()),
-      skillsDir: this.skillsDir
+      skillsDir: this.skillsDir,
+      contentLoadedCount
     };
   }
 
