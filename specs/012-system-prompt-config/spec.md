@@ -101,15 +101,157 @@
 - **PromptManager**: 管理模板的加载、缓存、查询和切换。提供模板路径解析、内容读取、元数据解析等功能。
 - **Agent**: 已有实体，新增对 PromptManager 的引用（可选，或直接在创建时注入提示词内容）。
 
+## Clarifications *(from /speckit.clarify)*
+
+### 第一次澄清（2026-04-10）- 系统提示词模板设计
+
+以下问题已确认答案：
+
+### Q1: 模板中 `tools` 字段的格式和用途 ✅ 已确认
+
+**确认答案**：
+- **格式**：字符串数组，如 `tools: [read_file, write_file, shell]`
+- **用途（MVP）**：仅作文档用途，标识推荐使用的工具集
+- **后续扩展**：可与 AgentConfig.tools.allow/deny 集成，实现工具过滤
+
+### Q2: 模板中 `model` 字段与配置的关系 ✅ 已确认
+
+**确认答案**：
+- **用途**：仅作文档用途，推荐使用的模型
+- **优先级**：配置优先，`AgentConfig.model` > 默认模型，模板 model 不参与运行时决策
+
+### Q3: 模板内容的组合方式 ✅ 已确认
+
+**确认答案**：
+- **组合方式**：完全替换模式
+- **skillPrompts 注入**：保持现有逻辑，模板加载后，skillPrompts 仍在 Agent 构造函数中注入
+- **最终结构**：`{模板内容}\n\n{skillPrompts}`
+
+### Q4: 路径解析的具体规则 ✅ 已确认
+
+**确认答案**：
+- **`~` 展开**：在 PromptManager 中统一处理
+- **相对路径基准**：配置文件所在目录（`~/.miniclaw/`）
+- **支持格式**：`file://`、`~`、`./`、无前缀
+
+### Q5: 热重载功能的 MVP 必要性 ✅ 已确认
+
+**确认答案**：
+- **MVP 不必须**：热重载标记为 P4 功能
+- **MVP 范围**：仅实现模板加载和 Agent 关联
+
+---
+
+### 第二次澄清（2026-04-10）- 工具集差异分析
+
+基于 Claude Code Tools.json 与 miniclaw 现有工具的对比，发现以下差异：
+
+#### 工具对照表
+
+| Claude Code | Miniclaw | 状态 | 功能对比 |
+|-------------|----------|------|----------|
+| Read | read_file | 命名不一致 | Claude 支持图片/PDF/notebook，miniclaw 仅文本 |
+| Write | write_file | 命名不一致 | Claude 覆盖写入，miniclaw 追加模式 |
+| Bash | shell | 命名不一致 | Claude 支持后台/超时/描述，miniclaw 功能简单 |
+| WebFetch | web_fetch | 命名不一致 | Claude 带 AI 处理，miniclaw 仅返回原始内容 |
+| WebSearch | web_search | 命名不一致 | 功能基本相同 |
+| Task | - | **缺失** | 子代理启动，高优先级 |
+| Glob | - | **缺失** | 文件模式搜索，高优先级 |
+| Grep | - | **缺失** | 内容搜索，高优先级 |
+| LS | - | **缺失** | 目录列表，高优先级 |
+| Edit/MultiEdit | - | **缺失** | 文件编辑，高优先级 |
+| TodoWrite | - | **缺失** | 任务管理，中优先级 |
+| BashOutput/KillBash | - | **缺失** | 后台进程管理，中优先级 |
+| ExitPlanMode | - | **缺失** | 退出计划模式，低优先级 |
+| NotebookEdit | - | **缺失** | Jupyter 编辑，低优先级 |
+| - | memory_search | **独有** | Claude 无此功能 |
+| - | memory_get | **独有** | Claude 无此功能 |
+
+#### 待确认问题
+
+### Q6: 工具命名统一策略 ⏳ 待确认
+
+**问题**：是否将 miniclaw 工具命名统一到 Claude Code 风格？
+
+**选项**：
+- A. 统一命名（read_file → Read，write_file → Write 等）
+- B. 保持 snake_case 风格（read_file, write_file）
+- C. 支持双命名（别名兼容）
+
+**建议**：选择 **B**，保持 snake_case 风格
+- 与代码风格一致（TypeScript 变量命名）
+- 避免破坏现有 API
+- 工具名称仅在内部使用，不影响用户体验
+
+### Q7: 缺失工具的补充优先级 ⏳ 待确认
+
+**问题**：应按什么优先级补充缺失工具？
+
+**建议优先级**：
+
+**P0（核心必需）** - 代码编辑基础能力：
+- `glob` - 文件模式搜索，代码导航必需
+- `grep` - 内容搜索，代码理解必需
+- `ls` - 目录列表，文件系统导航必需
+- `edit` / `multi_edit` - 文件编辑，代码修改核心
+
+**P1（重要增强）**：
+- `task` - 子代理启动，复杂任务处理
+- `todo_write` - 任务管理，工作流支持
+
+**P2（锦上添花）**：
+- `bash_output` / `kill_bash` - 后台进程管理
+
+**P3（可选）**：
+- `exit_plan_mode` - 退出计划模式（需要 plan mode 支持）
+- `notebook_edit` - Jupyter notebook 编辑
+
+### Q8: 独有工具（memory_*）的处理 ⏳ 待确认
+
+**问题**：memory_search 和 memory_get 如何处理？
+
+**建议**：
+- **保留**：这是 miniclaw 的特色功能
+- **文档化**：在工具描述中说明这是独有功能
+- **可选配置**：通过配置决定是否启用
+
+### Q9: 现有工具功能增强 ⏳ 待确认
+
+**问题**：现有工具是否需要增强以匹配 Claude Code 能力？
+
+**建议增强**：
+
+| 工具 | 增强项 | 优先级 |
+|------|--------|--------|
+| read_file | 图片/PDF支持、offset/limit、编码检测 | P1 |
+| write_file | 覆盖/追加模式选择（当前仅追加） | P0 |
+| shell | 超时参数、后台运行、描述、工作目录 | P1 |
+| web_fetch | 保持简单，AI 处理由 agent 决定 | P3 |
+
+### Q10: 工具描述格式统一 ⏳ 待确认
+
+**问题**：是否统一工具描述格式？
+
+**建议**：
+- 参考 Claude Code Tools.json 的描述风格
+- 每个工具描述应包含：用途、使用场景、参数说明
+- 保持简洁但信息丰富
+
+---
+
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
 - **SC-001**: 系统提示词从代码中完全分离，`src/core/agent/index.ts` 中 DEFAULT_SYSTEM_PROMPT 仅作为后备使用
 - **SC-002**: 至少 3 个 Agent（main、etf、policy）可以配置使用不同的系统提示词模板
-- **SC-003**: 模板文件修改后，通过 API 命令可在 1 秒内完成重新加载
-- **SC-004**: 模板加载失败时，应用正常启动且日志中记录明确的错误信息
-- **SC-005**: 现有功能（chat、streamChat、工具调用）在模板外部化后保持 100% 兼容
+- **SC-003**: 模板加载失败时，应用正常启动且日志中记录明确的错误信息
+- **SC-004**: 现有功能（chat、streamChat、工具调用）在模板外部化后保持 100% 兼容
+
+### P4 Success Criteria (Hot Reload)
+
+- **SC-P4-001**: 模板文件修改后，通过 CLI 命令 `/prompts reload` 可在 1 秒内完成重新加载
+- **SC-P4-002**: 运行时切换模板后，后续对话立即使用新的系统提示词
 
 ## Technical Design (Optional)
 
