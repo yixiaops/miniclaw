@@ -14,7 +14,7 @@ import { PromptManager } from './core/prompt/index.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
-import { getBuiltinTools } from './tools/index.js';
+import { getBuiltinTools, filterToolsByPolicy } from './tools/index.js';
 
 /**
  * 创建 Agent 的工厂函数
@@ -62,9 +62,17 @@ function createAgentFactory(
       agent.setModel(agentConfig.model);
     }
 
-    // 注册内置工具
+    // 注册内置工具（根据配置过滤）
     const builtinTools = getBuiltinTools();
-    builtinTools.forEach((tool: any) => agent.registerTool(tool as any));
+    const { tools: effectiveTools, stats } = filterToolsByPolicy(builtinTools, agentConfig?.tools);
+
+    // 记录工具过滤结果
+    if (stats.unknown.length > 0) {
+      console.warn(`[${agentId}] 配置中存在未知的工具名: ${stats.unknown.join(', ')}`);
+    }
+    console.log(`[${agentId}] 注册工具: ${stats.allowed} 个 (总共 ${stats.total}, 禁止 ${stats.denied})`);
+
+    effectiveTools.forEach((tool: any) => agent.registerTool(tool as any));
 
     // 注册子代理工具
     // 所有 Agent 都可以创建子代理（权限由 SubagentManager 检查）
