@@ -1,202 +1,104 @@
-# Implementation Plan: Skill Lazy Loading System
+# Implementation Plan: [FEATURE]
 
-**Branch**: `011-skill-lazy-loading` | **Date**: 2026-04-09 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/011-skill-lazy-loading/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Implement a skill lazy loading mechanism for miniclaw: load only metadata (name, description, triggers) at startup, inject metadata into system prompt, let the AI model decide which skill to use, then load full content on-demand via the model's `read` tool call. This follows the pi-coding-agent convention and reduces startup time/prompt size.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-**Language/Version**: TypeScript 5.9.3, Node.js >=18
-**Primary Dependencies**: @mariozechner/pi-coding-agent v0.65.2 (provides `loadSkillsFromDir`, `formatSkillsForPrompt`), express v5.2.1, socket.io v4.8.3
-**Storage**: File system - skills stored in ~/.miniclaw/skills/ directory as SKILL.md files
-**Testing**: vitest v4.0.18
-**Target Platform**: Node.js CLI + API + Web service (multi-channel)
-**Project Type**: CLI + API + Web service hybrid (channels: cli, api, feishu, web)
-**Performance Goals**: Startup time <2 seconds with 10 skills; system prompt with metadata <2000 chars
-**Constraints**: Model uses existing `read` tool to load skill content; no special skill-loading tool needed
-**Scale/Scope**: 10+ skills expected, each SKILL.md ~1-5KB content
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
+
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-**Status**: No constitution file found in project. Using standard development practices:
-- [x] Tests required for new functionality
-- [x] TypeScript strict mode compliance
-- [x] Follow existing code patterns in src/core/skill/
-- [x] No breaking changes to existing PiSkillManager API
-
-**Gates Passed**: All clear to proceed.
+[Gates determined based on constitution file]
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/011-skill-lazy-loading/
-├── plan.md              # This file
-├── spec.md              # Feature specification (completed)
-├── research.md          # Phase 0 output
-├── data-model.md        # Phase 1 output
-├── quickstart.md        # Phase 1 output
-├── contracts/           # Phase 1 output (if needed)
-└── tasks.md             # Phase 2 output
+specs/[###-feature]/
+├── plan.md              # This file (/speckit.plan command output)
+├── research.md          # Phase 0 output (/speckit.plan command)
+├── data-model.md        # Phase 1 output (/speckit.plan command)
+├── quickstart.md        # Phase 1 output (/speckit.plan command)
+├── contracts/           # Phase 1 output (/speckit.plan command)
+└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
 
 ### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
 ```text
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
 src/
-├── core/
-│   ├── skill/
-│   │   ├── index.ts           # Module entry (exports)
-│   │   ├── types.ts           # Type definitions
-│   │   ├── pi-manager.ts      # PiSkillManager (current implementation)
-│   │   ├── loader.ts          # Skill loader (deprecated, for reference)
-│   │   ├── manager.ts         # Old SkillManager (deprecated)
-│   │   └── matcher.ts         # Skill matcher (deprecated)
-│   ├── agent/
-│   ├── gateway/
-│   └── ...
-├── channels/
-│   ├── cli.ts
-│   ├── api.ts
-│   ├── web.ts
-│   └── feishu.ts
-├── tools/
-│   ├── read-file.ts           # Read tool (model uses this for lazy loading)
-│   └── ...
-└── index.ts
+├── models/
+├── services/
+├── cli/
+└── lib/
 
 tests/
-├── unit/
-│   └── skill/
-│   │   ├── pi-manager.test.ts
-│   │   └── loader.test.ts
-│   └── ...
-└── integration/
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-**Structure Decision**: Follow existing pattern in src/core/skill/. Modify pi-manager.ts to enhance lazy loading support. No new files needed - leverage existing read-file.ts tool.
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
 ## Complexity Tracking
 
-> No Constitution violations - design follows existing patterns and uses pi-coding-agent standard APIs.
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| N/A | No complexity introduced | Design uses existing pi-coding-agent API |
-
-## Phase 0: Research
-
-### Research Tasks
-
-1. **Understand pi-coding-agent Skill API behavior**
-   - How does `loadSkillsFromDir` work? Does it load content or just metadata?
-   - What format does `formatSkillsForPrompt` produce?
-   - Source: pi-coding-agent source code and documentation
-
-2. **Understand model read tool usage**
-   - How does the model know which file to read?
-   - How is skill file path exposed to model?
-   - Source: Existing read-file.ts implementation
-
-3. **Review existing PiSkillManager implementation**
-   - What is current behavior?
-   - What changes are needed for lazy loading?
-   - Source: src/core/skill/pi-manager.ts
-
-### Research Findings
-
-**Finding 1**: pi-coding-agent Skill API already implements lazy loading
-- `loadSkillsFromDir` reads file but only extracts metadata (name, description, filePath)
-- Skill type does NOT include content field
-- `formatSkillsForPrompt` outputs `<available_skills>` XML with `<location>` tag
-- Source: `/root/job/miniclaw/node_modules/@mariozechner/pi-coding-agent/dist/core/skills.js`
-
-**Finding 2**: Model uses existing `read_file` tool for content loading
-- `<location>` tag in prompt provides absolute file path
-- Model can directly call `read_file({ path: "..." })`
-- No special tool needed for skill loading
-
-**Finding 3**: Current implementation is already complete!
-- PiSkillManager correctly uses loadSkillsFromDir and formatSkillsForPrompt
-- MiniclawAgent receives skillManager and injects prompts
-- All channels (cli, api, web, feishu) properly initialize skillManager
-- Source: `/root/job/miniclaw/src/index.ts`, `/root/job/miniclaw/src/core/agent/index.ts`
-
-## Phase 1: Design & Contracts
-
-**Status**: ✅ Completed
-
-### Generated Artifacts
-
-1. **research.md** - Research findings and decisions
-2. **data-model.md** - Entity definitions and data flow
-3. **quickstart.md** - Usage guide and examples
-
-### Key Design Decisions
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Metadata loading | Use pi-coding-agent loadSkillsFromDir | Already implements lazy loading |
-| Prompt format | Use formatSkillsForPrompt | Standard Agent Skills XML format |
-| Content loading | Model uses read_file tool | No new tool needed |
-| Configuration | Constructor params + config file | Follows existing pattern |
-
-### Implementation Status
-
-**No code changes needed!** The lazy loading system is already fully implemented:
-
-- ✅ `PiSkillManager.load()` - Loads metadata only
-- ✅ `PiSkillManager.getAllPrompts()` - Formats with `<location>`
-- ✅ `MiniclawAgent` constructor - Injects skill prompts
-- ✅ `main()` - Initializes and passes skillManager
-- ✅ `read_file` tool - Available for model to load content
-
-### Testing Requirements
-
-While implementation is complete, tests should verify:
-
-1. **Unit Tests**:
-   - PiSkillManager.load() returns metadata only
-   - getAllPrompts() produces valid XML with `<location>`
-   - Skill filtering by disableModelInvocation
-
-2. **Integration Tests**:
-   - Agent system prompt contains skill metadata
-   - Model can read skill files via read_file tool
-   - Skill content is not loaded until read
-
-### Contracts
-
-No external contracts needed - the system uses pi-coding-agent's standard Skill API.
-
-### Constitution Re-check
-
-- [x] Tests required for new functionality → Need to add tests
-- [x] TypeScript strict mode compliance → Existing code is compliant
-- [x] Follow existing code patterns → Using pi-coding-agent patterns
-- [x] No breaking changes to existing API → No changes made
-
-## Phase 2: Tasks
-
-Tasks will be generated by `/speckit.tasks` command.
-
-### Recommended Tasks
-
-1. **Add unit tests for PiSkillManager**
-   - Test load() returns metadata only
-   - Test getAllPrompts() format
-   - Test skill filtering
-
-2. **Add integration tests**
-   - Test full lazy loading flow
-   - Test model read tool integration
-
-3. **Update documentation**
-   - Add skill development guide
-   - Update README with skill system info
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

@@ -10,6 +10,7 @@ import { loadConfig, type Config, type AgentConfig } from './core/config.js';
 import { SubagentManager } from './core/subagent/manager.js';
 import { createSessionsSpawnTool, createSubagentsTool } from './core/subagent/tools.js';
 import { createPiSkillManager, type PiSkillManager } from './core/skill/index.js';
+import { PromptManager } from './core/prompt/index.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
@@ -20,11 +21,15 @@ import { getBuiltinTools } from './tools/index.js';
  *
  * @param registry - Agent 注册表
  * @param subagentManager - 子代理管理器
+ * @param promptManager - 提示词管理器
+ * @param preloadedPrompts - 预加载的提示词映射
  * @param skillManager - 技能管理器（可选）
  */
 function createAgentFactory(
   _registry: AgentRegistry,
   subagentManager: SubagentManager,
+  _promptManager: PromptManager,
+  preloadedPrompts: Map<string, string>,
   skillManager?: PiSkillManager
 ) {
   return (
@@ -36,9 +41,15 @@ function createAgentFactory(
   ) => {
     console.log(`[Gateway] 创建新 Agent: ${sessionKey} (type: ${agentId}, isSubagent: ${isSubagent || false})`);
 
+    // 使用预加载的提示词（如果存在）
+    const systemPrompt = preloadedPrompts.get(agentId);
+    if (systemPrompt) {
+      console.log(`[Gateway] 使用预加载的提示词: chars=${systemPrompt.length}`);
+    }
+
     // 创建 Agent
     const agent = new MiniclawAgent(config, {
-      systemPrompt: agentConfig?.systemPrompt,
+      systemPrompt,
       tools: [], // 先不传工具，后面单独注册
       agentId,
       isSubagent: isSubagent || false,
@@ -149,8 +160,36 @@ async function main() {
   };
   const subagentManager = new SubagentManager(subagentConfig, registry);
 
+  // 创建 PromptManager
+  console.log('\n初始化 PromptManager...');
+  const promptManager = new PromptManager();
+  console.log(`默认模板路径: ${promptManager.getDefaultPromptPath()}`);
+
+  // 预加载所有 Agent 的 systemPrompt
+  const preloadedPrompts: Map<string, string> = new Map();
+  if (config.agents?.list) {
+    console.log('预加载 Agent 提示词...');
+    for (const agentConfig of config.agents.list) {
+      if (agentConfig.systemPrompt) {
+        console.log(`  加载 ${agentConfig.id} Agent 的提示词...`);
+        const result = await promptManager.loadPrompt(agentConfig.systemPrompt, {
+          verbose: true
+        });
+        if (result.success && result.template) {
+          preloadedPrompts.set(agentConfig.id, result.template.content);
+          console.log(`    ✓ 提示词加载成功: name=${result.template.name}, chars=${result.template.content.length}`);
+        } else if (result.usedFallback && result.template) {
+          preloadedPrompts.set(agentConfig.id, result.template.content);
+          console.log(`    ⚠ 使用后备提示词: chars=${result.template.content.length}`);
+        } else {
+          console.warn(`    ✗ 提示词加载失败: ${result.error}`);
+        }
+      }
+    }
+  }
+
   // 创建 Agent 工厂函数
-  const createAgentFn = createAgentFactory(registry, subagentManager, skillManager);
+  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, skillManager);
 
   // 更新 Registry 的创建函数（使用任意键设置私有属性）
   (registry as any).createAgentFn = createAgentFn;

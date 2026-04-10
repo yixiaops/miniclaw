@@ -45,10 +45,11 @@ describe('writeFileTool', () => {
     it('should create new file and write content', async () => {
       const testFile = join(testDir, 'test.txt');
       
-      // 执行写入操作
+      // 执行写入操作（使用 create 模式）
       const result = await writeFileTool.execute('', { 
         path: testFile, 
-        content: 'Hello, Miniclaw!' 
+        content: 'Hello, Miniclaw!',
+        mode: 'create'
       });
       
       // 验证返回结构
@@ -64,10 +65,11 @@ describe('writeFileTool', () => {
     it('should create directory if not exists', async () => {
       const testFile = join(testDir, 'subdir', 'test.txt');
       
-      // 执行写入操作（目录不存在）
+      // 执行写入操作（目录不存在，使用 create 模式）
       const result = await writeFileTool.execute('', { 
         path: testFile, 
-        content: 'Nested file' 
+        content: 'Nested file',
+        mode: 'create'
       });
       
       // 验证返回结构
@@ -82,12 +84,12 @@ describe('writeFileTool', () => {
       const testFile = join(testDir, 'append.txt');
       
       // 第一次写入（创建文件）
-      const result1 = await writeFileTool.execute('', { path: testFile, content: 'First line\n' });
+      const result1 = await writeFileTool.execute('', { path: testFile, content: 'First line\n', mode: 'create' });
       expect(result1.content[0].text).toContain('创建');
       expect(result1.details.created).toBe(true);
       
-      // 第二次写入（追加）
-      const result2 = await writeFileTool.execute('', { path: testFile, content: 'Second line\n' });
+      // 第二次写入（追加模式）
+      const result2 = await writeFileTool.execute('', { path: testFile, content: 'Second line\n', mode: 'append' });
       expect(result2.content[0].text).toContain('追加');
       expect(result2.details.created).toBe(false);
       
@@ -98,10 +100,11 @@ describe('writeFileTool', () => {
     it('should write UTF-8 content', async () => {
       const testFile = join(testDir, 'utf8.txt');
       
-      // 写入 UTF-8 内容
+      // 写入 UTF-8 内容（使用 create 模式）
       const result = await writeFileTool.execute('', { 
         path: testFile, 
-        content: '你好，世界！🌍' 
+        content: '你好，世界！🌍',
+        mode: 'create'
       });
       
       // 验证返回结构
