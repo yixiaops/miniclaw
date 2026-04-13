@@ -229,55 +229,6 @@ function estimateMessagesTokens(messages: AgentMessage[]): number {
 }
 
 /**
- * 解析系统提示词为章节列表
- *
- * 按 Markdown 二级标题 (##) 切分章节，
- * 第一个 ## 之前的内容作为 "前言"。
- *
- * @param prompt - 完整的系统提示词
- * @returns 章节列表，每项包含标题和内容
- */
-function parsePromptSections(prompt: string): Array<{ title: string; content: string }> {
-  // 防御：空输入
-  if (!prompt || prompt.trim().length === 0) {
-    return [{ title: '前言', content: '(空)' }];
-  }
-
-  const sections: Array<{ title: string; content: string }> = [];
-  const lines = prompt.split('\n');
-
-  let currentTitle = '前言';
-  let currentContent: string[] = [];
-
-  for (const line of lines) {
-    // 匹配 ## 标题（不匹配 ###）
-    const titleMatch = line.match(/^##\s+(.+)$/);
-    if (titleMatch) {
-      // 保存之前的章节
-      const content = currentContent.join('\n').trim();
-      sections.push({
-        title: currentTitle,
-        content: content || '(空)'
-      });
-      // 开始新章节
-      currentTitle = titleMatch[1].trim();
-      currentContent = [];
-    } else {
-      currentContent.push(line);
-    }
-  }
-
-  // 保存最后一个章节
-  const lastContent = currentContent.join('\n').trim();
-  sections.push({
-    title: currentTitle,
-    content: lastContent || '(空)'
-  });
-
-  return sections;
-}
-
-/**
  * 截断文本，保留两头
  *
  * 当文本超过最大长度时，保留前后各 150 字符，
@@ -1107,46 +1058,41 @@ export class MiniclawAgent {
     const totalChars = systemPrompt.length;
     const totalTokens = estimateTokens(systemPrompt);
 
+    this.log(`📋 系统提示词组成 (总计 ${totalChars} 字符, ~${totalTokens} tokens):`);
+    this.log('');
+
     if (this.promptComponents.length === 0) {
-      // 兼容旧逻辑：没有组成部分信息时，按章节打印
-      this.log(`📋 系统提示词 (${totalChars} 字符, ~${totalTokens} tokens):`);
-      const sections = parsePromptSections(systemPrompt);
-      for (const section of sections) {
-        this.log(`  [${section.title}] (${section.content.length} 字符):`);
-        const truncated = truncateText(section.content);
-        this.log(`    ${truncated.replace(/\n/g, '\n    ')}`);
-      }
-    } else {
-      // 新逻辑：按组成部分打印
-      this.log(`📋 系统提示词组成 (总计 ${totalChars} 字符, ~${totalTokens} tokens):`);
-      this.log('');
-
-      this.promptComponents.forEach((comp, index) => {
-        const chars = comp.content.length;
-
-        // 构建标签
-        let label = comp.label;
-        if (comp.meta?.skillCount !== undefined) {
-          label = `${comp.label} (${comp.meta.skillCount} 个技能)`;
-        }
-
-        this.log(`  [${index + 1}] ${label} (${chars} 字符)`);
-
-        // 打印内容预览
-        const truncated = truncateText(comp.content, 400);
-        const lines = truncated.split('\n');
-        lines.forEach(line => {
-          this.log(`      ${line}`);
-        });
-
-        // 如果有技能名称列表，打印
-        if (comp.meta?.skillNames && comp.meta.skillNames.length > 0) {
-          this.log(`      技能列表: ${comp.meta.skillNames.join(', ')}`);
-        }
-
-        this.log('');
-      });
+      // 没有组成部分信息时，显示警告
+      this.log(`  ⚠️ 未收到组成部分信息`);
+      this.log(`  提示词内容: ${truncateText(systemPrompt, 400)}`);
+      return;
     }
+
+    this.promptComponents.forEach((comp, index) => {
+      const chars = comp.content.length;
+
+      // 构建标签
+      let label = comp.label;
+      if (comp.meta?.skillCount !== undefined) {
+        label = `${comp.label} (${comp.meta.skillCount} 个技能)`;
+      }
+
+      this.log(`  [${index + 1}] ${label} (${chars} 字符)`);
+
+      // 打印内容预览
+      const truncated = truncateText(comp.content, 400);
+      const lines = truncated.split('\n');
+      lines.forEach(line => {
+        this.log(`      ${line}`);
+      });
+
+      // 如果有技能名称列表，打印
+      if (comp.meta?.skillNames && comp.meta.skillNames.length > 0) {
+        this.log(`      技能列表: ${comp.meta.skillNames.join(', ')}`);
+      }
+
+      this.log('');
+    });
   }
 
   /**
