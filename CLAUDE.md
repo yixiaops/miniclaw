@@ -170,6 +170,63 @@ EOF
 # Trigger: "help me commit" → matches git-helper skill
 ```
 
+### Tool Configuration
+
+Each Agent can be configured with a specific set of tools via `tools.allow` and `tools.deny` in the config file.
+
+#### Configuration File
+
+Path: `~/.miniclaw/config.json`
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "main"
+        // No tools config → all 12 tools
+      },
+      {
+        "id": "readonly",
+        "tools": {
+          "allow": ["read_file", "glob", "grep", "ls"]
+        }
+      },
+      {
+        "id": "safe",
+        "tools": {
+          "deny": ["shell", "write_file"]
+        }
+      }
+    ]
+  }
+}
+```
+
+#### Tool Filtering Rules
+
+1. **Default**: No config → all 12 built-in tools
+2. **Allow whitelist**: Only specified tools
+3. **Deny blacklist**: Prohibit specific tools
+4. **Priority**: `deny` takes precedence over `allow`
+
+#### Built-in Tools
+
+| Tool Name | Description |
+|-----------|-------------|
+| `read_file` | Read file contents |
+| `write_file` | Write to file |
+| `edit` | Edit file (single change) |
+| `multi_edit` | Edit file (multiple changes) |
+| `shell` | Execute shell commands |
+| `glob` | File pattern matching |
+| `grep` | Text search |
+| `ls` | List directory contents |
+| `web_fetch` | Fetch web content |
+| `web_search` | Web search |
+| `memory_search` | Semantic search |
+| `memory_get` | Read memory files |
+
 ## Code Style
 
 - TypeScript strict mode enabled
@@ -178,12 +235,12 @@ EOF
 - Chinese comments used throughout for documentation
 
 ## Active Technologies
-- TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架) (002-improve-test-coverage)
-- SimpleMemoryStorage (内存存储，可选文件持久化) (002-improve-test-coverage)
-- @mariozechner/pi-coding-agent (^0.65.2) for skill loading/formatting (010-pi-skill-integration)
-- TypeScript 5.9.3, Node.js >=18 + @mariozechner/pi-coding-agent v0.65.2 (provides `loadSkillsFromDir`, `formatSkillsForPrompt`), express v5.2.1, socket.io v4.8.3 (011-skill-lazy-loading)
-- File system - skills stored in ~/.miniclaw/skills/ directory as SKILL.md files (011-skill-lazy-loading)
+- TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)
+- SimpleMemoryStorage (内存存储，可选文件持久化)
+- @mariozechner/pi-coding-agent (^0.65.2) for skill loading/formatting
+- @mariozechner/pi-agent-core (Agent框架), @mariozechner/pi-ai (AI流式处理) for tool injection optimization
 
 ## Recent Changes
+- 013-optimize-tool-injection: Implemented tool filtering with allow/deny lists, default full tool access for all agents
 - 010-pi-skill-integration: Integrated pi-coding-agent Skill API for skill loading, matching, and prompt injection
 - 002-improve-test-coverage: Added TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)

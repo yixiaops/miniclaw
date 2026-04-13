@@ -1,6 +1,6 @@
 /**
  * Tools 模块入口
- * 导出所有内置工具
+ * 导出所有内置工具和工具过滤功能
  */
 import { readFileTool } from './read-file.js';
 import { writeFileTool } from './write-file.js';
@@ -14,6 +14,17 @@ import { grepTool } from './grep.js';
 import { lsTool } from './ls.js';
 import { editTool } from './edit.js';
 import { multiEditTool } from './multi-edit.js';
+
+// 导出工具过滤功能
+export {
+  filterToolsByPolicy,
+  resolveEffectiveToolList,
+  validateToolNames,
+  BUILTIN_TOOL_NAMES,
+  type ToolPolicy,
+  type FilterStats,
+  type EffectiveToolList
+} from './filter.js';
 
 export {
   readFileTool,
