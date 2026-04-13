@@ -214,6 +214,20 @@ describe('CliChannel', () => {
 
       stdoutSpy.mockRestore();
     });
+
+    it('should prompt after processing completes', async () => {
+      const cli = new CliChannel(mockGateway);
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+      await cli.processInput('Hello');
+
+      // 验证最后输出包含换行符（后续会调用 prompt）
+      const calls = stdoutSpy.mock.calls;
+      const lastCall = calls[calls.length - 1];
+      expect(lastCall[0]).toContain('\n');
+
+      stdoutSpy.mockRestore();
+    });
   });
 
   describe('stop', () => {
