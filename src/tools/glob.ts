@@ -2,7 +2,7 @@
  * 文件模式匹配搜索工具
  * 使用 glob 模式搜索文件，返回匹配的文件路径列表
  */
-import { glob } from 'fast-glob';
+import fg from 'fast-glob';
 import { statSync } from 'fs';
 import { Type, type Static } from '@sinclair/typebox';
 
@@ -46,7 +46,7 @@ export const globTool = {
 
     try {
       // 执行 glob 搜索
-      const files = await glob(pattern, {
+      const files = await fg(pattern, {
         cwd: path || process.cwd(),
         absolute: true,
         onlyFiles: true,

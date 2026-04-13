@@ -3,7 +3,9 @@
  * 轻量级个人 AI 助手
  */
 import 'dotenv/config';
-import { MiniclawAgent } from './core/agent/index.js';
+import path from 'path';
+import { MiniclawAgent, DEFAULT_SYSTEM_PROMPT } from './core/agent/index.js';
+import type { PromptComponent } from './core/agent/types.js';
 import { AgentRegistry } from './core/agent/registry.js';
 import { MiniclawGateway } from './core/gateway/index.js';
 import { loadConfig, type Config, type AgentConfig } from './core/config.js';
@@ -47,6 +49,46 @@ function createAgentFactory(
       console.log(`[Gateway] 使用预加载的提示词: chars=${systemPrompt.length}`);
     }
 
+    // 构建提示词组成部分
+    const promptComponents: PromptComponent[] = [];
+
+    // 1. 提示词文件（如果有自定义提示词）
+    if (systemPrompt && agentConfig?.systemPrompt) {
+      promptComponents.push({
+        type: 'file',
+        label: `提示词文件 ${path.basename(agentConfig.systemPrompt)}`,
+        content: systemPrompt,
+        meta: {
+          fileName: path.basename(agentConfig.systemPrompt)
+        }
+      });
+    }
+
+    // 2. 技能数据（如果有技能）
+    if (skillManager && skillManager.count() > 0) {
+      const skillPrompts = skillManager.getAllPrompts();
+      if (skillPrompts) {
+        promptComponents.push({
+          type: 'skills',
+          label: '技能数据',
+          content: skillPrompts,
+          meta: {
+            skillCount: skillManager.count(),
+            skillNames: skillManager.getNames()
+          }
+        });
+      }
+    }
+
+    // 3. 默认提示词（如果没有自定义提示词文件）
+    if (!systemPrompt && !agentConfig?.systemPrompt) {
+      promptComponents.push({
+        type: 'default',
+        label: '默认提示词',
+        content: DEFAULT_SYSTEM_PROMPT
+      });
+    }
+
     // 创建 Agent
     const agent = new MiniclawAgent(config, {
       systemPrompt,
@@ -54,7 +96,8 @@ function createAgentFactory(
       agentId,
       isSubagent: isSubagent || false,
       thinkingLevel: agentConfig?.thinkingLevel || 'low',  // 默认 low 级别推理
-      skillManager  // 传递技能管理器
+      skillManager,  // 传递技能管理器
+      promptComponents  // 传递提示词组成部分
     });
 
     // 如果指定了模型，切换模型

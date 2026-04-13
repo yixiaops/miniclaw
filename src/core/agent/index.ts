@@ -39,6 +39,7 @@ import { Agent, type AgentTool, type AgentMessage } from '@mariozechner/pi-agent
 import { streamSimple } from '@mariozechner/pi-ai';
 import type { Config } from '../config.js';
 import type { PiSkillManager } from '../skill/index.js';
+import type { PromptComponent } from './types.js';
 
 // ============================================================================
 // 类型定义
@@ -68,6 +69,8 @@ export interface MiniclawAgentOptions {
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
   /** 技能管理器（可选） */
   skillManager?: PiSkillManager;
+  /** 提示词组成部分（用于日志显示） */
+  promptComponents?: PromptComponent[];
 }
 
 /**
@@ -98,7 +101,7 @@ export interface StreamChatEvent {
  *
  * 定义 Agent 的基本角色、能力和工作原则。
  */
-const DEFAULT_SYSTEM_PROMPT = `你是 Miniclaw,一个专业、可靠的 AI 助手。
+export const DEFAULT_SYSTEM_PROMPT = `你是 Miniclaw,一个专业、可靠的 AI 助手。
 
 ## 核心原则
 
@@ -223,6 +226,84 @@ function estimateMessagesTokens(messages: AgentMessage[]): number {
   }
 
   return totalTokens;
+}
+
+/**
+ * 解析系统提示词为章节列表
+ *
+ * 按 Markdown 二级标题 (##) 切分章节，
+ * 第一个 ## 之前的内容作为 "前言"。
+ *
+ * @param prompt - 完整的系统提示词
+ * @returns 章节列表，每项包含标题和内容
+ */
+function parsePromptSections(prompt: string): Array<{ title: string; content: string }> {
+  // 防御：空输入
+  if (!prompt || prompt.trim().length === 0) {
+    return [{ title: '前言', content: '(空)' }];
+  }
+
+  const sections: Array<{ title: string; content: string }> = [];
+  const lines = prompt.split('\n');
+
+  let currentTitle = '前言';
+  let currentContent: string[] = [];
+
+  for (const line of lines) {
+    // 匹配 ## 标题（不匹配 ###）
+    const titleMatch = line.match(/^##\s+(.+)$/);
+    if (titleMatch) {
+      // 保存之前的章节
+      const content = currentContent.join('\n').trim();
+      sections.push({
+        title: currentTitle,
+        content: content || '(空)'
+      });
+      // 开始新章节
+      currentTitle = titleMatch[1].trim();
+      currentContent = [];
+    } else {
+      currentContent.push(line);
+    }
+  }
+
+  // 保存最后一个章节
+  const lastContent = currentContent.join('\n').trim();
+  sections.push({
+    title: currentTitle,
+    content: lastContent || '(空)'
+  });
+
+  return sections;
+}
+
+/**
+ * 截断文本，保留两头
+ *
+ * 当文本超过最大长度时，保留前后各 150 字符，
+ * 中间用省略标记代替。
+ *
+ * @param text - 原始文本
+ * @param maxLength - 最大显示长度 (默认 400)
+ * @returns 截断后的文本
+ */
+function truncateText(text: string, maxLength: number = 400): string {
+  // 防御：空输入
+  if (!text || text.length === 0) return '(空)';
+
+  // 未超长，直接返回
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  // 超长，截断处理
+  const headLength = 150;
+  const tailLength = 150;
+  const omitted = text.length - headLength - tailLength;
+  const head = text.substring(0, headLength);
+  const tail = text.substring(text.length - tailLength);
+
+  return `${head}\n... (省略 ${omitted} 字符) ...\n${tail}`;
 }
 
 /**
@@ -380,6 +461,9 @@ export class MiniclawAgent {
   /** 技能管理器（可选） */
   private skillManager?: PiSkillManager;
 
+  /** 提示词组成部分 */
+  private promptComponents: PromptComponent[] = [];
+
   /**
    * 获取日志前缀
    *
@@ -488,6 +572,9 @@ export class MiniclawAgent {
     if (options?.tools) {
       this.tools = options.tools;
     }
+
+    // 保存提示词组成部分
+    this.promptComponents = options?.promptComponents || [];
 
     this.log(`Agent 初始化完成`);
   }
@@ -1009,6 +1096,60 @@ export class MiniclawAgent {
   // ==========================================================================
 
   /**
+   * 打印提示词组成部分
+   *
+   * 按来源分类打印系统提示词，便于调试和理解。
+   *
+   * @private
+   */
+  private printPromptComponents(): void {
+    const systemPrompt = this.agent.state.systemPrompt;
+    const totalChars = systemPrompt.length;
+    const totalTokens = estimateTokens(systemPrompt);
+
+    if (this.promptComponents.length === 0) {
+      // 兼容旧逻辑：没有组成部分信息时，按章节打印
+      this.log(`📋 系统提示词 (${totalChars} 字符, ~${totalTokens} tokens):`);
+      const sections = parsePromptSections(systemPrompt);
+      for (const section of sections) {
+        this.log(`  [${section.title}] (${section.content.length} 字符):`);
+        const truncated = truncateText(section.content);
+        this.log(`    ${truncated.replace(/\n/g, '\n    ')}`);
+      }
+    } else {
+      // 新逻辑：按组成部分打印
+      this.log(`📋 系统提示词组成 (总计 ${totalChars} 字符, ~${totalTokens} tokens):`);
+      this.log('');
+
+      this.promptComponents.forEach((comp, index) => {
+        const chars = comp.content.length;
+
+        // 构建标签
+        let label = comp.label;
+        if (comp.meta?.skillCount !== undefined) {
+          label = `${comp.label} (${comp.meta.skillCount} 个技能)`;
+        }
+
+        this.log(`  [${index + 1}] ${label} (${chars} 字符)`);
+
+        // 打印内容预览
+        const truncated = truncateText(comp.content, 400);
+        const lines = truncated.split('\n');
+        lines.forEach(line => {
+          this.log(`      ${line}`);
+        });
+
+        // 如果有技能名称列表，打印
+        if (comp.meta?.skillNames && comp.meta.skillNames.length > 0) {
+          this.log(`      技能列表: ${comp.meta.skillNames.join(', ')}`);
+        }
+
+        this.log('');
+      });
+    }
+  }
+
+  /**
    * 打印发送上下文日志
    *
    * 在发送消息给大模型前,打印完整的上下文信息,包括:
@@ -1028,13 +1169,8 @@ export class MiniclawAgent {
     this.log(`  "${input}"`);
     this.log(`   - 输入 Token 估算: ${estimateTokens(input)}`);
 
-    // 打印系统提示词
-    const systemPrompt = this.agent.state.systemPrompt;
-    this.log(`📋 系统提示词 (${systemPrompt.length} 字符, ~${estimateTokens(systemPrompt)} tokens):`);
-    const promptPreview = systemPrompt.length > 3000
-      ? systemPrompt.substring(0, 3000) + '...'
-      : systemPrompt;
-    this.log(`  ${promptPreview.replace(/\n/g, '\n   ')}`);
+    // 打印系统提示词（按组成部分）
+    this.printPromptComponents();
 
     // 打印对话历史
     const messages = this.agent.state.messages;
@@ -1055,7 +1191,7 @@ export class MiniclawAgent {
     }
 
     // 打印总 Token 估算
-    const totalTokens = estimateTokens(input) + estimateTokens(systemPrompt) + estimateMessagesTokens(messages);
+    const totalTokens = estimateTokens(input) + estimateTokens(this.agent.state.systemPrompt) + estimateMessagesTokens(messages);
     this.log(`📊 总 Token 估算: ~${totalTokens}`);
 
     this.logDivider();
