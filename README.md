@@ -10,8 +10,103 @@
 - 🔌 **多通道接入** - CLI / API / Web / 飞书
 - 📝 **Session 管理** - 按用户/群组隔离对话
 - 🛠️ **工具调用** - 文件读写、Shell 执行、网络请求
-- 💾 **记忆系统** - 对话历史持久化
+- 💾 **记忆系统** - 双层记忆结构（短期 + 长期），支持去重、敏感检测
 - 🧩 **可扩展** - 模块化架构，易于扩展
+
+## 记忆系统
+
+Miniclaw 采用双层记忆结构，参考 OpenClaw 设计：
+
+```
+┌───────────────────────────────────────────────────────┐
+│                  记忆系统架构                          │
+├───────────────────────────────────────────────────────┤
+│                                                       │
+│  ┌─────────────────────┐  ┌─────────────────────┐    │
+│  │   Short-term        │  │   Long-term         │    │
+│  │   短期记忆          │  │   长期记忆          │    │
+│  │                     │  │                     │    │
+│  │  - 会话上下文        │  │  - 用户偏好         │    │
+│  │  - 临时决策          │  │  - 重要决策         │    │
+│  │  - TTL 24h           │  │  - 工作记录         │    │
+│  │  - Session隔离       │  │  - 持久化存储       │    │
+│  └─────────────────────┘  └─────────────────────┘    │
+│           │                          │               │
+│           └──────────┬────────────────┘               │
+│                      ▼                                │
+│          ┌─────────────────────┐                      │
+│          │   MemoryPromoter    │                      │
+│          │                     │                      │
+│          │  - 重要性晋升        │                      │
+│          │  - TTL清理           │                      │
+│          │  - 自动迁移          │                      │
+│          └─────────────────────┘                      │
+│                                                       │
+└───────────────────────────────────────────────────────┘
+```
+
+### 核心模块
+
+| 模块 | 功能 | 文件 |
+|------|------|------|
+| **ShortTermMemory** | 短期记忆存储（Session隔离） | `src/memory/store/short-term.ts` |
+| **LongTermMemory** | 长期记忆持久化 | `src/memory/store/long-term.ts` |
+| **SessionManager** | Session 生命周期管理 | `src/memory/store/session-manager.ts` |
+| **TTLManager** | TTL 过期清理 | `src/memory/store/ttl-manager.ts` |
+| **MemoryPromoter** | 记忆晋升机制 | `src/memory/promotion/promoter.ts` |
+| **MemorySearchTool** | 双层检索工具 | `src/memory/tools/search.ts` |
+| **EmbeddingService** | 向量嵌入服务 | `src/memory/embedding/` |
+| **DeduplicationChecker** | 去重检查器 | `src/memory/write/` |
+| **SensitiveDetector** | 敏感信息检测 | `src/memory/write/` |
+| **MemoryWriteTool** | 写入工具接口 | `src/memory/tools/` |
+
+### 使用示例
+
+```typescript
+import { ShortTermMemory } from './memory/store/short-term.js';
+import { LongTermMemory } from './memory/store/long-term.js';
+import { MemoryPromoter } from './memory/promotion/promoter.js';
+import { TTLManager } from './memory/store/ttl-manager.js';
+import { MemorySearchTool } from './memory/tools/search.js';
+
+// 初始化组件
+const sessionManager = new SessionManager();
+const shortTerm = new ShortTermMemory(sessionManager);
+const longTerm = new LongTermMemory('./memory');
+const promoter = new MemoryPromoter(shortTerm, longTerm);
+const ttlManager = new TTLManager(shortTerm, promoter);
+const searchTool = new MemorySearchTool(shortTerm, longTerm, embeddingService);
+
+// 写入短期记忆
+const sessionId = sessionManager.create();
+await shortTerm.write('User context', sessionId, { importance: 0.8 });
+
+// 晋升重要记忆
+await promoter.promoteAll();
+
+// 搜索
+const results = await searchTool.search({ query: 'User' });
+```
+
+### 记忆晋升规则
+
+- **重要性阈值**: 0.5（可配置）
+- **晋升时机**: TTL过期前自动检查
+- **晋升后**: 从短期记忆移除，持久化到长期记忆
+
+### TTL 清理
+
+- **默认 TTL**: 24 小时
+- **清理间隔**: 1 小时
+- **清理策略**: 过期前检查重要性，决定晋升或删除
+
+### 文档
+
+详细文档：
+- [API文档](docs/api/memory-write.md)
+- [架构设计](docs/architecture/dual-layer.md)
+
+---
 
 ## 架构设计
 
