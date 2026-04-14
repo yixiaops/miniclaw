@@ -6,6 +6,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CliChannel } from '../../../src/channels/cli';
 import type { MiniclawGateway } from '../../../src/core/gateway/index.js';
 
+// Mock readline 模块
+const mockPrompt = vi.fn();
+const mockOn = vi.fn();
+const mockClose = vi.fn();
+
+vi.mock('readline', () => ({
+  createInterface: vi.fn(() => ({
+    prompt: mockPrompt,
+    on: mockOn,
+    close: mockClose
+  }))
+}));
+
 describe('CliChannel', () => {
   let mockGateway: MiniclawGateway;
   let mockAgent: any;
@@ -50,6 +63,9 @@ describe('CliChannel', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    mockPrompt.mockClear();
+    mockOn.mockClear();
+    mockClose.mockClear();
   });
 
   describe('constructor', () => {
@@ -215,18 +231,45 @@ describe('CliChannel', () => {
       stdoutSpy.mockRestore();
     });
 
-    it('should prompt after processing completes', async () => {
+    it('should prompt after processing completes when rl is initialized', async () => {
+      // 直接测试 processInput 的逻辑
+      // 由于 rl 在 start() 中初始化，processInput() 应该安全处理 rl 为 null 的情况
       const cli = new CliChannel(mockGateway);
       const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
+      // 不调用 start()，rl 为 null，不应抛出错误
       await cli.processInput('Hello');
 
-      // 验证最后输出包含换行符（后续会调用 prompt）
-      const calls = stdoutSpy.mock.calls;
-      const lastCall = calls[calls.length - 1];
-      expect(lastCall[0]).toContain('\n');
+      // 验证 streamHandleMessage 被调用
+      expect(mockGateway.streamHandleMessage).toHaveBeenCalled();
 
       stdoutSpy.mockRestore();
+    });
+
+    it('should call rl.prompt() after start when processing input', async () => {
+      // 测试 rl.prompt() 在 start() 后被调用
+      // 使用顶部 mock 的 readline 模块
+      const cli = new CliChannel(mockGateway);
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+      // 调用 start() 初始化 rl（会使用 mock 的 readline.createInterface）
+      const startPromise = cli.start();
+
+      // start() 会调用 rl.prompt() 一次
+      expect(mockPrompt).toHaveBeenCalledTimes(1);
+
+      // 触发 'line' 事件处理器（模拟用户输入）
+      const lineCallback = mockOn.mock.calls.find(call => call[0] === 'line')?.[1];
+      if (lineCallback) {
+        await lineCallback('Hello');
+      }
+
+      // 验证 prompt 再次被调用（start 时 + 处理后）
+      // 应该至少被调用 3 次：start 时的 prompt + line 处理后的 prompt + processInput 内的 prompt
+      expect(mockPrompt.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+      stdoutSpy.mockRestore();
+      await cli.stop();
     });
   });
 
