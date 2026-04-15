@@ -133,6 +133,9 @@ export class CliChannel implements Channel {
     }
 
     process.stdout.write('\n\n');
+    if (this.rl) {
+      this.rl.prompt();
+    }
   }
 
   /**

@@ -10,6 +10,9 @@
 - 🔌 **多通道接入** - CLI / API / Web / 飞书
 - 📝 **Session 管理** - 按用户/群组隔离对话
 - 🛠️ **工具调用** - 文件读写、Shell 执行、网络请求
+- 🔧 **工具过滤** - 支持白名单/黑名单限制 Agent 可用工具
+- 📄 **可配置提示词** - YAML frontmatter 格式，支持多 Agent 配置
+- 🧠 **技能系统** - 基于 pi-coding-agent Skill API，渐进式披露
 - 💾 **记忆系统** - 双层记忆结构（短期 + 长期），支持去重、敏感检测
 - 🧩 **可扩展** - 模块化架构，易于扩展
 
@@ -185,6 +188,9 @@ const results = await searchTool.search({ query: 'User' });
 | **Router** | 消息路由，决定消息归属哪个 Session | `src/core/gateway/router.ts` |
 | **SessionManager** | Session 创建、销毁、过期管理 | `src/core/gateway/session.ts` |
 | **AgentRegistry** | Agent 实例管理，复用和清理 | `src/core/agent/registry.ts` |
+| **PromptManager** | 系统提示词加载与解析（YAML frontmatter） | `src/core/prompt/manager.ts` |
+| **ToolFilter** | 工具白名单/黑名单过滤 | `src/tools/filter.ts` |
+| **PiSkillManager** | 技能加载与匹配（pi-coding-agent API） | `src/core/skill/pi-manager.ts` |
 | **SessionKeyBuilder** | Session Key 构建/解析 | `src/core/session-key/index.ts` |
 | **Agent** | 与大模型交互、工具调用 | `src/core/agent/index.ts` |
 | **Memory** | 对话历史持久化 | `src/core/memory/simple.ts` |
@@ -432,6 +438,157 @@ npm run debug:api
 npm run debug:web
 ```
 
+## 工具过滤配置
+
+Agent 可以通过 `tools.allow` 和 `tools.deny` 配置限制可用工具。
+
+### 配置规则
+
+| 规则 | 说明 |
+|------|------|
+| **默认** | 无配置时返回所有工具 |
+| **allow 白名单** | 限制为只使用指定工具 |
+| **deny 黑名单** | 禁止特定工具（优先于 allow） |
+
+### 示例配置
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "etf",
+        "tools": {
+          "allow": ["web_search", "web_fetch", "read_file"]
+        }
+      },
+      {
+        "id": "policy",
+        "tools": {
+          "deny": ["shell"]
+        }
+      }
+    ]
+  }
+}
+```
+
+### 内置工具列表
+
+| 工具 | 功能 |
+|------|------|
+| `read_file` | 读取文件内容 |
+| `write_file` | 写入文件 |
+| `shell` | 执行 Shell 命令 |
+| `glob` | 文件模式搜索 |
+| `grep` | 内容搜索 |
+| `ls` | 目录列表 |
+| `edit` | 文件编辑 |
+| `multi_edit` | 多处编辑 |
+| `web_fetch` | 抓取网页内容 |
+| `web_search` | 搜索网页信息 |
+| `memory_search` | 搜索记忆 |
+| `memory_get` | 获取记忆片段 |
+
+## 提示词配置
+
+系统提示词使用 YAML frontmatter 格式，支持元数据和内容分离。
+
+### 格式说明
+
+```markdown
+---
+name: etf
+description: ETF 市场分析专家
+model: qwen3.5-plus
+version: 2.0.0
+tools:
+  - web_search
+  - web_fetch
+---
+
+你是 ETF 市场分析专家，擅长基金选择和投资策略。
+
+# Tone and Style
+...
+```
+
+### 元数据字段
+
+| 字段 | 说明 |
+|------|------|
+| `name` | 提示词名称 |
+| `description` | 提示词描述 |
+| `model` | 推荐使用的模型 |
+| `version` | 版本号 |
+| `tools` | 推荐使用的工具列表 |
+
+### Agent 配置引用
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "etf",
+        "systemPrompt": "file://~/.miniclaw/prompts/etf.md"
+      }
+    ]
+  }
+}
+```
+
+## 技能系统
+
+基于 pi-coding-agent Skill API，实现渐进式披露加载。
+
+### 技能目录结构
+
+```
+~/.miniclaw/skills/
+├── weather/SKILL.md
+└── test-skill/SKILL.md
+```
+
+### SKILL.md 格式
+
+```markdown
+---
+name: weather
+description: 获取天气信息和预报
+triggers: 天气、天气预报、今天天气
+---
+
+# Weather Skill
+
+使用 web_fetch 工具获取天气数据...
+```
+
+### 配置
+
+```json
+{
+  "skills": {
+    "dir": "~/.miniclaw/skills",
+    "enabled": true
+  }
+}
+```
+
+### 系统提示词组成
+
+系统提示词按来源分块打印：
+
+```
+📋 系统提示词组成 (总计 1155 字符):
+
+  [1] 提示词文件 etf.md (409 字符)
+    你是 ETF 市场分析专家...
+
+  [2] 技能数据 (2 个技能: weather, test-skill)
+    <available_skills>...</available_skills>
+```
+
 ## 开发指南
 
 ### 项目结构
@@ -570,6 +727,14 @@ npm run test:coverage
 - **WebSocket**: Socket.IO
 
 ## 版本历史
+
+### v0.3.0 (2026-04-10) - 提示词配置 + 工具过滤 + 技能系统
+
+- ✅ Tool Filtering（工具白名单/黑名单过滤）
+- ✅ Prompt 配置（YAML frontmatter 格式）
+- ✅ PiSkillManager（pi-coding-agent Skill API）
+- ✅ PromptComponent（系统提示词按组成部分显示）
+- ✅ 多 Agent 配置支持
 
 ### v0.2.0 (2026-03-20) - Gateway + 记忆系统
 
