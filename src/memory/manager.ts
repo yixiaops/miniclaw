@@ -92,7 +92,9 @@ export class MemoryManager {
 
     // 初始化所有组件
     this.sessionManager = new SessionManager();
-    this.shortTerm = new ShortTermMemory(this.sessionManager);
+    this.shortTerm = new ShortTermMemory(this.sessionManager, {
+      defaultTTL: config.defaultTTL
+    });
     this.longTerm = new LongTermMemory(config.storageDir);
     this.embeddingService = new EmbeddingService();
 
