@@ -7,7 +7,7 @@
  */
 
 import { access, readFile } from 'fs/promises';
-import { VerificationCheck, VerificationResult, VerificationType } from './types.js';
+import { VerificationCheck, VerificationResult } from './types.js';
 
 /**
  * 验证文件是否存在
