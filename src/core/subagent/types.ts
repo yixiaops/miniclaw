@@ -170,3 +170,34 @@ export interface SubagentsResult {
   /** 结果数据 */
   data: SubagentInfo[] | SubagentInfo | SubagentStats | string;
 }
+
+/**
+ * 验证结果
+ */
+export interface VerificationResult {
+  /** 是否验证通过 */
+  passed: boolean;
+  /** 验证项列表 */
+  checks: VerificationCheck[];
+}
+
+/**
+ * 验证类型
+ */
+export type VerificationType = 'file_exists' | 'test_pass' | 'content_contains' | 'custom';
+
+/**
+ * 验证项
+ */
+export interface VerificationCheck {
+  /** 验证类型 */
+  type: VerificationType;
+  /** 验证目标 */
+  target: string;
+  /** 是否通过 */
+  passed: boolean;
+  /** 错误信息 */
+  error?: string;
+  /** 预期内容（content_contains 用） */
+  expected?: string;
+}
