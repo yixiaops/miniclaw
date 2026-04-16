@@ -110,6 +110,39 @@ export interface SkillsConfig {
 }
 
 /**
+ * 记忆系统配置
+ */
+export interface MemoryConfig {
+  /** 是否启用双层记忆（默认 false，向后兼容） */
+  enabled?: boolean;
+  /** 存储目录 */
+  dir?: string;
+  /** 默认 TTL（毫秒），默认 24h */
+  defaultTTL?: number;
+  /** TTL 清理间隔（毫秒），默认 1h */
+  cleanupInterval?: number;
+  /** 晋升重要性阈值，默认 0.5 */
+  promotionThreshold?: number;
+  /** 默认重要性分数，默认 0.3 */
+  defaultImportance?: number;
+  /** 是否注入记忆上下文到 Agent 系统提示词 */
+  injectContext?: boolean;
+}
+
+/**
+ * 默认记忆配置
+ */
+export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
+  enabled: false,
+  dir: './memory-storage',
+  defaultTTL: 24 * 60 * 60 * 1000,  // 24h
+  cleanupInterval: 60 * 60 * 1000,   // 1h
+  promotionThreshold: 0.5,
+  defaultImportance: 0.3,
+  injectContext: false
+};
+
+/**
  * 应用配置
  */
 export interface Config {
@@ -123,6 +156,8 @@ export interface Config {
   agents?: AgentsConfig;
   /** 技能配置（可选） */
   skills?: SkillsConfig;
+  /** 记忆系统配置（可选） */
+  memory?: MemoryConfig;
 }
 
 /**
@@ -199,6 +234,19 @@ export function loadConfig(): Config {
       if (jsonConfig.skills) {
         config.skills = jsonConfig.skills;
         console.log(`[Config] 从 ${configPath} 加载了技能配置: dir=${jsonConfig.skills.dir || '(默认)'}, enabled=${jsonConfig.skills.enabled ?? true}`);
+      }
+
+      if (jsonConfig.memory) {
+        config.memory = {
+          enabled: jsonConfig.memory.enabled ?? DEFAULT_MEMORY_CONFIG.enabled,
+          dir: jsonConfig.memory.dir ?? DEFAULT_MEMORY_CONFIG.dir,
+          defaultTTL: jsonConfig.memory.defaultTTL ?? DEFAULT_MEMORY_CONFIG.defaultTTL,
+          cleanupInterval: jsonConfig.memory.cleanupInterval ?? DEFAULT_MEMORY_CONFIG.cleanupInterval,
+          promotionThreshold: jsonConfig.memory.promotionThreshold ?? DEFAULT_MEMORY_CONFIG.promotionThreshold,
+          defaultImportance: jsonConfig.memory.defaultImportance ?? DEFAULT_MEMORY_CONFIG.defaultImportance,
+          injectContext: jsonConfig.memory.injectContext ?? DEFAULT_MEMORY_CONFIG.injectContext
+        };
+        console.log(`[Config] 从 ${configPath} 加载了记忆配置: enabled=${config.memory.enabled}, dir=${config.memory.dir}`);
       }
     } catch (err) {
       console.warn(`[Config] 加载 ${configPath} 失败:`, err instanceof Error ? err.message : err);

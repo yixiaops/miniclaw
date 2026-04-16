@@ -12,6 +12,8 @@ import { AgentRegistry, type CreateAgentFn } from '../agent/registry.js';
 import { SimpleMemoryStorage, type Message as StorageMessage } from '../memory/simple.js';
 import type { Config } from '../config.js';
 import type { MiniclawAgent, StreamChatEvent } from '../agent/index.js';
+import type { MemoryManager } from '../../memory/manager.js';
+import { AutoMemoryWriter } from '../../memory/auto-writer.js';
 
 /**
  * 消息上下文
@@ -61,6 +63,8 @@ export interface GatewayConfig {
   sessionConfig?: Partial<SessionConfig>;
   /** 存储目录路径（可选，默认 ~/.miniclaw/sessions/） */
   storageDir?: string;
+  /** 记忆管理器（可选） */
+  memoryManager?: MemoryManager;
 }
 
 /**
@@ -112,6 +116,12 @@ export class MiniclawGateway {
   /** 持久化存储 */
   private storage: SimpleMemoryStorage;
 
+  /** 记忆管理器（可选） */
+  private memoryManager?: MemoryManager;
+
+  /** 自动记忆写入器（可选） */
+  private autoWriter?: AutoMemoryWriter;
+
   /** 配置 */
   private config: Config;
 
@@ -146,6 +156,15 @@ export class MiniclawGateway {
 
     // 初始化持久化存储
     this.storage = new SimpleMemoryStorage(gatewayConfig.storageDir);
+
+    // 初始化记忆管理器（可选）
+    this.memoryManager = gatewayConfig.memoryManager;
+    if (this.memoryManager) {
+      this.autoWriter = new AutoMemoryWriter(this.memoryManager, {
+        defaultImportance: config.memory?.defaultImportance ?? 0.3,
+        enabled: config.memory?.enabled ?? false
+      });
+    }
   }
 
   /**
@@ -214,7 +233,12 @@ export class MiniclawGateway {
     // 6. 保存对话历史到持久化存储
     await this.saveSessionHistory(session);
 
-    // 7. 返回响应
+    // 7. 自动写入记忆（静默降级，不阻断主流程）
+    if (this.autoWriter) {
+      await this.autoWriter.writeConversation(sessionId, ctx.content, response.content);
+    }
+
+    // 8. 返回响应
     return {
       content: response.content,
       sessionId

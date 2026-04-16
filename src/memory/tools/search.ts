@@ -59,11 +59,12 @@ interface SearchStats {
  * ```
  */
 export class MemorySearchTool {
-  /** 短期记忆 */
+  /** 矩期记忆 */
   private shortTerm: ShortTermMemory;
   /** 长期记忆 */
   private longTerm: LongTermMemory;
-  /** 嵌入服务 */
+  /** 嵌入服务（预留，未来用于语义搜索） */
+  // @ts-expect-error Reserved for future semantic search
   private embeddingService: IEmbeddingService;
   /** 排序配置 */
   private rankingConfig: RankingConfig = {
