@@ -7,7 +7,7 @@
  */
 
 import type { MemoryEntry, MemoryMetadata } from './interface.js';
-import { SessionManager, SessionInfo } from './session-manager.js';
+import { SessionManager } from './session-manager.js';
 
 /**
  * 短期记忆配置

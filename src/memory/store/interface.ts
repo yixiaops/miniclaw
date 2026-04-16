@@ -25,6 +25,12 @@ export interface MemoryMetadata {
   importance?: number;
   /** 标签 */
   tags?: string[];
+  /** TTL 过期时间（短期记忆） */
+  ttl?: number;
+  /** 是否已持久化 */
+  persisted?: boolean;
+  /** 晋升时间（长期记忆） */
+  promotedAt?: Date;
 }
 
 /**

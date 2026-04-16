@@ -6,7 +6,7 @@
  * @module memory/tools/write
  */
 
-import type { IMemoryStore, MemoryType, MemoryMetadata, MemoryEntry } from '../store/interface.js';
+import type { IMemoryStore, MemoryType, MemoryMetadata } from '../store/interface.js';
 import type { DeduplicationChecker } from '../write/deduplication.js';
 import type { SensitiveDetector } from '../write/sensitive-detector.js';
 

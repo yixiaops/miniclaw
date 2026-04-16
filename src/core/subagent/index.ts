@@ -15,11 +15,22 @@ export type {
   SessionsSpawnParams,
   SessionsSpawnResult,
   SubagentsParams,
-  SubagentsResult
+  SubagentsResult,
+  VerificationResult,
+  VerificationType,
+  VerificationCheck
 } from './types.js';
 
 // 核心类
 export { SubagentManager, createSubagentManager } from './manager.js';
+
+// 验证器
+export {
+  SubagentVerifier,
+  verifyFileExists,
+  verifyContentContains,
+  verifyTestsPass
+} from './verifier.js';
 
 // 工具
 export { 
