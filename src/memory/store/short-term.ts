@@ -43,9 +43,18 @@ export class ShortTermMemory {
 
   /**
    * 创建短期记忆存储
+   *
+   * @param sessionManager - Session 管理器
+   * @param config - 配置选项（可选）
    */
-  constructor(sessionManager: SessionManager) {
+  constructor(sessionManager: SessionManager, config?: Partial<ShortTermConfig>) {
     this.sessionManager = sessionManager;
+    if (config?.defaultTTL) {
+      this.config.defaultTTL = config.defaultTTL;
+    }
+    if (config?.maxPerSession) {
+      this.config.maxPerSession = config.maxPerSession;
+    }
   }
 
   /**
