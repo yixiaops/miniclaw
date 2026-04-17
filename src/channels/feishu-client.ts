@@ -12,7 +12,8 @@ export interface FeishuConfig {
 
 export interface SendMessageParams {
   receiveId: string;
-  msgType: 'text';
+  receiveIdType?: 'open_id' | 'user_id' | 'union_id' | 'chat_id';
+  msgType: 'text' | 'post';
   content: string;
   replyToMessageId?: string;
 }
@@ -92,10 +93,22 @@ export class FeishuClient {
   async sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
     const token = await this.getAccessToken();
 
+    // 构建消息内容
+    let content: string;
+    if (params.msgType === 'post') {
+      // 富文本消息（与 OpenClaw 格式一致）
+      content = JSON.stringify({
+        zh_cn: { content: [[{ tag: 'md', text: params.content }]] }
+      });
+    } else {
+      // 普通文本消息
+      content = JSON.stringify({ text: params.content });
+    }
+
     const body: Record<string, unknown> = {
       receive_id: params.receiveId,
       msg_type: params.msgType,
-      content: JSON.stringify({ text: params.content }),
+      content,
     };
 
     // 话题回复
@@ -103,8 +116,9 @@ export class FeishuClient {
       body.reply_to_message_id = params.replyToMessageId;
     }
 
+    const receiveIdType = params.receiveIdType || 'open_id';
     const response = await fetch(
-      'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=user_id',
+      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
       {
         method: 'POST',
         headers: {

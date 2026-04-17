@@ -6,6 +6,7 @@ import type { MiniclawGateway } from '../core/gateway/index.js';
 import { FeishuClient } from './feishu-client.js';
 import { FeishuWebSocket } from './feishu-websocket.js';
 import { MessageDeduplicator } from './feishu-dedup.js';
+import { FeishuReactions } from './feishu-reactions.js';
 
 /**
  * 飞书配置
@@ -27,6 +28,7 @@ export class FeishuChannel {
   private client: FeishuClient;
   private websocket: FeishuWebSocket;
   private deduplicator: MessageDeduplicator;
+  private reactions: FeishuReactions;
 
   constructor(gateway: MiniclawGateway) {
     const config = gateway.getConfig();
@@ -41,6 +43,7 @@ export class FeishuChannel {
     this.client = new FeishuClient(this.config);
     this.websocket = new FeishuWebSocket(this.config, this.client);
     this.deduplicator = new MessageDeduplicator({ maxSize: 10000 });
+    this.reactions = new FeishuReactions(this.config);
 
     // 设置消息回调
     this.websocket.onMessage(this.handleMessage.bind(this));
@@ -110,22 +113,35 @@ export class FeishuChannel {
       return;
     }
 
-    // 调用 Gateway 处理
-    const response = await this.gateway.handleMessage({
-      channel: 'feishu',
-      userId: event.senderId,
-      groupId: event.chatType === 'group' ? event.chatId : undefined,
-      content: event.content,
-    });
+    // 添加表情回应，表示正在处理
+    const reactionResult = await this.reactions.addProcessingReaction(event.messageId);
+    const reactionId = reactionResult.reactionId;
 
-    // 发送回复
-    if (response.content) {
-      await this.client.sendMessage({
-        receiveId: event.chatType === 'p2p' ? event.senderId : event.chatId,
-        msgType: 'text',
-        content: response.content,
-        replyToMessageId: event.rootId, // 群聊话题回复
+    try {
+      // 调用 Gateway 处理
+      const response = await this.gateway.handleMessage({
+        channel: 'feishu',
+        userId: event.senderId,
+        groupId: event.chatType === 'group' ? event.chatId : undefined,
+        content: event.content,
       });
+
+      // 发送回复
+      if (response.content) {
+        const receiveIdType = event.chatType === 'p2p' ? 'open_id' : 'chat_id';
+        await this.client.sendMessage({
+          receiveId: event.chatType === 'p2p' ? event.senderId : event.chatId,
+          receiveIdType,
+          msgType: 'post', // 使用富文本消息，与 OpenClaw 一致
+          content: response.content,
+          replyToMessageId: event.rootId, // 群聊话题回复
+        });
+      }
+    } finally {
+      // 处理完成后删除表情回应
+      if (reactionId) {
+        await this.reactions.deleteReaction(event.messageId, reactionId);
+      }
     }
   }
 }

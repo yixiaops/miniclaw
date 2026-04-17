@@ -127,7 +127,7 @@ describe('FeishuClient', () => {
 
       expect(result.messageId).toBe('om_test123');
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=user_id',
+        'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
