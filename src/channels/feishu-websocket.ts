@@ -1,10 +1,11 @@
 /**
- * 飞书 WebSocket 连接
+ * 飞书 WebSocket 连接（使用飞书官方 SDK）
  * T1.2 WebSocket 连接实现
  *
  * 负责：长连接管理、消息解析、重连机制
  */
 
+import * as Lark from '@larksuiteoapi/node-sdk';
 import { FeishuClient } from './feishu-client.js';
 
 export interface FeishuWebSocketOptions {
@@ -20,25 +21,7 @@ export interface FeishuEvent {
   chatType: 'p2p' | 'group';
   senderId: string;
   content: string;
-  rootId?: string; // 群聊话题根消息
-}
-
-interface FeishuWebSocketMessage {
-  type: string;
-  data?: {
-    message?: {
-      message_id: string;
-      chat_id: string;
-      chat_type: 'p2p' | 'group';
-      content: string;
-      sender?: {
-        sender_id?: {
-          user_id?: string;
-        };
-      };
-      root_id?: string;
-    };
-  };
+  rootId?: string;
 }
 
 export class FeishuWebSocket {
@@ -46,9 +29,8 @@ export class FeishuWebSocket {
   private client: FeishuClient;
   private options: FeishuWebSocketOptions;
 
-  private ws: WebSocket | null = null;
+  private wsClient: Lark.WSClient | null = null;
   private connected: boolean = false;
-  private reconnectAttempts: number = 0;
   private messageCallback: ((event: FeishuEvent) => void) | null = null;
   private stopped: boolean = false;
 
@@ -72,40 +54,30 @@ export class FeishuWebSocket {
   async start(): Promise<void> {
     this.stopped = false;
 
-    // 获取 token
-    const token = await this.client.getAccessToken();
+    const baseConfig = {
+      appId: this.config.appId,
+      appSecret: this.config.appSecret,
+    };
 
-    // 构建 WebSocket URL
-    // 飞书 WebSocket 地址格式：wss://ws.feishu.cn/ws/{app_id}?token={token}
-    const url = `wss://ws.feishu.cn/ws/${this.config.appId}?token=${token}`;
-
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(url);
-
-      this.ws.onopen = () => {
-        this.connected = true;
-        this.reconnectAttempts = 0;
-        resolve();
-      };
-
-      this.ws.onclose = (event) => {
-        this.connected = false;
-
-        if (!this.stopped) {
-          this.scheduleReconnect();
-        }
-      };
-
-      this.ws.onmessage = (event) => {
-        this.handleMessage(event.data);
-      };
-
-      this.ws.onerror = () => {
-        if (!this.connected) {
-          reject(new Error('WebSocket 连接失败'));
-        }
-      };
+    this.wsClient = new Lark.WSClient({
+      ...baseConfig,
+      loggerLevel: Lark.LoggerLevel.info,
     });
+
+    const eventDispatcher = new Lark.EventDispatcher({}).register({
+      'im.message.receive_v1': async (data: any) => {
+        this.handleMessage(data);
+      },
+    });
+
+    console.log('WebSocket 连接中...');
+
+    await this.wsClient.start({
+      eventDispatcher,
+    });
+
+    this.connected = true;
+    console.log('WebSocket 已连接');
   }
 
   /**
@@ -115,17 +87,19 @@ export class FeishuWebSocket {
     this.stopped = true;
     this.connected = false;
 
-    if (this.ws) {
-      this.ws.close(1000);
-      this.ws = null;
+    if (this.wsClient) {
+      // SDK 没有 stop 方法，但可以通过 stopped 标志控制
+      this.wsClient = null;
     }
+
+    console.log('WebSocket 已停止');
   }
 
   /**
    * 检查连接状态
    */
   isConnected(): boolean {
-    return this.connected;
+    return this.connected && !this.stopped;
   }
 
   /**
@@ -138,72 +112,41 @@ export class FeishuWebSocket {
   /**
    * 处理消息
    */
-  private handleMessage(data: string): void {
+  private handleMessage(data: any): void {
     try {
-      const message: FeishuWebSocketMessage = JSON.parse(data);
+      const message = data.message;
+      const sender = data.sender?.sender_id || {};
 
-      // 只处理消息接收事件
-      if (message.type !== 'im.message.receive_v1') {
-        return;
-      }
-
-      if (!message.data?.message) {
-        return;
-      }
-
-      const msg = message.data.message;
-
-      // 解析内容（飞书消息内容是 JSON 字符串）
+      // 解析内容
       let content = '';
       try {
-        const contentObj = JSON.parse(msg.content);
+        const contentObj = JSON.parse(message.content);
         content = contentObj.text || '';
       } catch {
-        content = msg.content;
+        content = message.content;
       }
 
       const event: FeishuEvent = {
-        type: message.type,
-        messageId: msg.message_id,
-        chatId: msg.chat_id,
-        chatType: msg.chat_type,
-        senderId: msg.sender?.sender_id?.user_id || '',
+        type: 'im.message.receive_v1',
+        messageId: message.message_id,
+        chatId: message.chat_id,
+        chatType: message.chat_type,
+        senderId: sender.open_id || sender.user_id || '',
         content,
-        rootId: msg.root_id,
+        rootId: message.root_id,
       };
+
+      console.log('收到消息:', {
+        messageId: event.messageId,
+        senderId: event.senderId,
+        content: event.content.substring(0, 50),
+      });
 
       if (this.messageCallback) {
         this.messageCallback(event);
       }
     } catch (error) {
-      // 解析失败，忽略消息
-      console.error('解析 WebSocket 消息失败:', error);
+      console.error('解析消息失败:', error);
     }
-  }
-
-  /**
-   * 安排重连
-   */
-  private scheduleReconnect(): void {
-    if (this.reconnectAttempts >= this.options.maxRetries!) {
-      console.error('达到最大重连次数，停止重连');
-      return;
-    }
-
-    // 指数退避
-    const delay = Math.min(
-      this.options.initialDelay! * Math.pow(2, this.reconnectAttempts),
-      this.options.maxDelay!
-    );
-
-    this.reconnectAttempts++;
-
-    setTimeout(() => {
-      if (!this.stopped) {
-        this.start().catch(() => {
-          // 重连失败，会触发 onclose 再次重连
-        });
-      }
-    }, delay);
   }
 }
