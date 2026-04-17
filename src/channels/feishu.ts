@@ -1,26 +1,18 @@
 /**
  * 飞书通道
- * 飞书机器人消息处理
+ * 集成 WebSocket 连接 + 消息去重 + Gateway 调用
  */
 import type { MiniclawGateway } from '../core/gateway/index.js';
+import { FeishuClient } from './feishu-client.js';
+import { FeishuWebSocket } from './feishu-websocket.js';
+import { MessageDeduplicator } from './feishu-dedup.js';
 
 /**
- * 飞书消息类型
+ * 飞书配置
  */
-export interface FeishuMessage {
-  messageId: string;
-  messageType: 'text' | 'post' | 'image' | 'file';
-  content: string;
-  senderId: string;
-  chatId?: string;
-}
-
-/**
- * 飞书回复类型
- */
-export interface FeishuReply {
-  msgType: 'text' | 'post';
-  content: string;
+export interface FeishuConfig {
+  appId: string;
+  appSecret: string;
 }
 
 /**
@@ -28,7 +20,13 @@ export interface FeishuReply {
  */
 export class FeishuChannel {
   private gateway: MiniclawGateway;
+  private config: FeishuConfig;
   private running = false;
+
+  // 组件
+  private client: FeishuClient;
+  private websocket: FeishuWebSocket;
+  private deduplicator: MessageDeduplicator;
 
   constructor(gateway: MiniclawGateway) {
     const config = gateway.getConfig();
@@ -37,14 +35,22 @@ export class FeishuChannel {
     }
 
     this.gateway = gateway;
+    this.config = config.feishu;
+
+    // 初始化组件
+    this.client = new FeishuClient(this.config);
+    this.websocket = new FeishuWebSocket(this.config, this.client);
+    this.deduplicator = new MessageDeduplicator({ maxSize: 10000 });
+
+    // 设置消息回调
+    this.websocket.onMessage(this.handleMessage.bind(this));
   }
 
   /**
    * 启动飞书通道
    */
   async start(): Promise<void> {
-    // TODO: 实现 WebSocket 连接
-    // 飞书长连接模式需要初始化 WebSocket 客户端
+    await this.websocket.start();
     this.running = true;
     console.log('飞书通道已启动');
   }
@@ -53,48 +59,9 @@ export class FeishuChannel {
    * 停止飞书通道
    */
   stop(): void {
+    this.websocket.stop();
     this.running = false;
     console.log('飞书通道已停止');
-  }
-
-  /**
-   * 处理接收到的消息
-   */
-  async processMessage(message: FeishuMessage): Promise<FeishuReply | null> {
-    // 忽略空消息
-    if (!message.content || message.content.trim() === '') {
-      return null;
-    }
-
-    // 只处理文本消息
-    if (message.messageType !== 'text') {
-      return {
-        msgType: 'text',
-        content: '暂不支持此类型消息'
-      };
-    }
-
-    // 调用 Gateway 处理
-    const response = await this.gateway.handleMessage({
-      channel: 'feishu',
-      userId: message.senderId,
-      groupId: message.chatId,
-      content: message.content
-    });
-
-    return {
-      msgType: 'text',
-      content: response.content
-    };
-  }
-
-  /**
-   * 发送回复
-   */
-  async sendReply(messageId: string, reply: FeishuReply): Promise<void> {
-    // TODO: 实现发送回复逻辑
-    // 需要调用飞书 API 发送消息
-    console.log(`Reply to ${messageId}: ${reply.content}`);
   }
 
   /**
@@ -102,5 +69,63 @@ export class FeishuChannel {
    */
   isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * 获取客户端（测试用）
+   */
+  getClient(): FeishuClient {
+    return this.client;
+  }
+
+  /**
+   * 获取 WebSocket（测试用）
+   */
+  getWebSocket(): FeishuWebSocket {
+    return this.websocket;
+  }
+
+  /**
+   * 获取去重器（测试用）
+   */
+  getDeduplicator(): MessageDeduplicator {
+    return this.deduplicator;
+  }
+
+  /**
+   * 处理消息
+   */
+  private async handleMessage(event: {
+    type: string;
+    messageId: string;
+    chatId: string;
+    chatType: 'p2p' | 'group';
+    senderId: string;
+    content: string;
+    rootId?: string;
+  }): Promise<void> {
+    // 去重检查
+    if (this.deduplicator.isDuplicate(event.messageId)) {
+      console.log(`消息 ${event.messageId} 已处理过，跳过`);
+      return;
+    }
+
+    // 调用 Gateway 处理
+    const response = await this.gateway.handleMessage({
+      channel: 'feishu',
+      userId: event.senderId,
+      groupId: event.chatType === 'group' ? event.chatId : undefined,
+      content: event.content,
+    });
+
+    // 发送回复
+    if (response.content) {
+      await this.client.sendMessage({
+        receiveId: event.chatType === 'p2p' ? event.senderId : event.chatId,
+        msgType: 'text',
+        content: response.content,
+        replyToMessageId: event.rootId, // 群聊话题回复
+      });
+    }
   }
 }
