@@ -66,6 +66,7 @@ export class FeishuWebSocket {
 
     const eventDispatcher = new Lark.EventDispatcher({}).register({
       'im.message.receive_v1': async (data: any) => {
+        console.log('[WebSocket] 收到 im.message.receive_v1 事件:', JSON.stringify(data, null, 2));
         this.handleMessage(data);
       },
     });

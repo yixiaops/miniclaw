@@ -13,6 +13,7 @@ import { SubagentManager } from './core/subagent/manager.js';
 import { createSessionsSpawnTool, createSubagentsTool } from './core/subagent/tools.js';
 import { createPiSkillManager, type PiSkillManager } from './core/skill/index.js';
 import { PromptManager } from './core/prompt/index.js';
+import { MemoryManager } from './memory/manager.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
@@ -192,6 +193,20 @@ async function main() {
     console.log('\n技能系统已禁用');
   }
 
+  // 初始化 MemoryManager（如果启用）
+  let memoryManager: MemoryManager | undefined;
+  if (config.memory?.enabled) {
+    console.log('\n初始化 MemoryManager...');
+    memoryManager = new MemoryManager({
+      storageDir: config.memory.dir || './memory-storage',
+      defaultTTL: config.memory.defaultTTL || 86400000,
+      cleanupInterval: config.memory.cleanupInterval || 3600000,
+      promotionThreshold: config.memory.promotionThreshold || 0.5
+    });
+    await memoryManager.initialize();
+    console.log('✓ MemoryManager 已初始化');
+  }
+
   // 创建 AgentRegistry
   const registry = new AgentRegistry(config, () => {
     // 临时空函数，后面会更新
@@ -248,7 +263,8 @@ async function main() {
   // 创建 Gateway
   const gateway = new MiniclawGateway(config, {
     createAgentFn,
-    maxAgents: config.agents?.defaults.maxConcurrent
+    maxAgents: config.agents?.defaults.maxConcurrent,
+    memoryManager
   });
 
   // 打印工具和 Agent 信息
@@ -280,6 +296,7 @@ async function main() {
         await api.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        if (memoryManager) memoryManager.destroy();
         process.exit(0);
       });
       break;
@@ -299,6 +316,7 @@ async function main() {
         feishu.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        if (memoryManager) memoryManager.destroy();
         process.exit(0);
       });
       break;
@@ -319,6 +337,7 @@ async function main() {
         await apiChannel.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        if (memoryManager) memoryManager.destroy();
         process.exit(0);
       });
       break;
