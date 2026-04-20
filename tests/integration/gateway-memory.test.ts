@@ -80,7 +80,7 @@ describe('Gateway with MemoryManager', () => {
 
       // 验证记忆已写入
       const status = memoryManager.getStatus();
-      expect(status.shortTermCount).toBeGreaterThan(0);
+      expect(status.candidatePoolCount).toBeGreaterThan(0);
     });
 
     it('should fallback to SimpleMemoryStorage when no memoryManager', async () => {
@@ -109,7 +109,7 @@ describe('Gateway with MemoryManager', () => {
         write: vi.fn().mockRejectedValue(new Error('Write failed')),
         initialize: vi.fn().mockResolvedValue(undefined),
         destroy: vi.fn(),
-        getStatus: vi.fn().mockReturnValue({ shortTermCount: 0 })
+        getStatus: vi.fn().mockReturnValue({ candidatePoolCount: 0 })
       } as unknown as MemoryManager;
 
       const gatewayWithFailure = new MiniclawGateway(mockConfig, {

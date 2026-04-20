@@ -1,12 +1,12 @@
 /**
  * @fileoverview TTL 管理器实现
  *
- * 实现短期记忆的 TTL 过期清理。
+ * 实现候选池记忆的 TTL 过期清理。
  *
  * @module memory/store/ttl-manager
  */
 
-import type { ShortTermMemory } from './short-term.js';
+import type { MemoryCandidatePool } from './candidate-pool.js';
 import type { MemoryPromoter } from '../promotion/promoter.js';
 
 /**
@@ -38,17 +38,17 @@ interface TTLStats {
 /**
  * TTL 管理器
  *
- * 定期清理过期的短期记忆。
+ * 定期清理过期的候选池记忆。
  *
  * @example
  * ```ts
- * const ttlManager = new TTLManager(shortTerm, promoter);
+ * const ttlManager = new TTLManager(candidatePool, promoter);
  * ttlManager.schedule(3600000); // 每小时清理
  * ```
  */
 export class TTLManager {
-  /** 短期记忆 */
-  private shortTerm: ShortTermMemory;
+  /** 候选池 */
+  private candidatePool: MemoryCandidatePool;
   /** 晋升器 */
   private promoter: MemoryPromoter;
   /** 定时器 */
@@ -66,8 +66,8 @@ export class TTLManager {
   /**
    * 创建 TTL 管理器
    */
-  constructor(shortTerm: ShortTermMemory, promoter: MemoryPromoter) {
-    this.shortTerm = shortTerm;
+  constructor(candidatePool: MemoryCandidatePool, promoter: MemoryPromoter) {
+    this.candidatePool = candidatePool;
     this.promoter = promoter;
   }
 
@@ -79,7 +79,7 @@ export class TTLManager {
   async cleanup(): Promise<CleanupResult> {
     this.stats.cleanups++;
 
-    const expiredEntries = this.shortTerm.getExpiredEntries();
+    const expiredEntries = this.candidatePool.getExpiredEntries();
     const result: CleanupResult = { expired: 0, promoted: 0, cleaned: 0 };
 
     for (const entry of expiredEntries) {
@@ -97,7 +97,7 @@ export class TTLManager {
       }
 
       // 删除过期记忆
-      await this.shortTerm.delete(entry.id);
+      await this.candidatePool.delete(entry.id);
       this.stats.totalCleaned++;
       result.cleaned++;
     }

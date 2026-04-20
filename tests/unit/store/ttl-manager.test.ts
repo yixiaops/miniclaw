@@ -8,14 +8,14 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TTLManager } from '../../../src/memory/store/ttl-manager.js';
-import { ShortTermMemory } from '../../../src/memory/store/short-term.js';
+import { MemoryCandidatePool } from '../../../src/memory/store/candidate-pool.js';
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
 import { MemoryPromoter } from '../../../src/memory/promotion/promoter.js';
 import { LongTermMemory } from '../../../src/memory/store/long-term.js';
 
 describe('TTLManager', () => {
   let ttlManager: TTLManager;
-  let shortTerm: ShortTermMemory;
+  let candidatePool: MemoryCandidatePool;
   let sessionManager: SessionManager;
   let promoter: MemoryPromoter;
   let longTerm: LongTermMemory;
@@ -23,15 +23,15 @@ describe('TTLManager', () => {
 
   beforeEach(() => {
     sessionManager = new SessionManager();
-    shortTerm = new ShortTermMemory(sessionManager);
+    candidatePool = new MemoryCandidatePool(sessionManager);
     longTerm = new LongTermMemory(testDir);
-    promoter = new MemoryPromoter(shortTerm, longTerm);
-    ttlManager = new TTLManager(shortTerm, promoter);
+    promoter = new MemoryPromoter(candidatePool, longTerm);
+    ttlManager = new TTLManager(candidatePool, promoter);
   });
 
   afterEach(() => {
     ttlManager.stop();
-    shortTerm.clear();
+    candidatePool.clear();
   });
 
   describe('cleanup', () => {
@@ -39,7 +39,7 @@ describe('TTLManager', () => {
       const sessionId = 'session-123';
 
       // 写入一个短期记忆，TTL 100ms
-      await shortTerm.write('Expired', sessionId, { ttl: 100 });
+      await candidatePool.write('Expired', sessionId, { ttl: 100 });
 
       // 等待过期
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -53,7 +53,7 @@ describe('TTLManager', () => {
     it('should not cleanup fresh memories', async () => {
       const sessionId = 'session-123';
 
-      await shortTerm.write('Fresh', sessionId);
+      await candidatePool.write('Fresh', sessionId);
 
       const cleaned = await ttlManager.cleanup();
 
@@ -64,7 +64,7 @@ describe('TTLManager', () => {
       const sessionId = 'session-123';
 
       // 写入一个重要但即将过期的记忆
-      await shortTerm.write('Important', sessionId, {
+      await candidatePool.write('Important', sessionId, {
         ttl: 100,
         importance: 0.8
       });
@@ -99,7 +99,7 @@ describe('TTLManager', () => {
 
     it('should run cleanup on schedule', async () => {
       const sessionId = 'session-123';
-      await shortTerm.write('Expired', sessionId, { ttl: 100 });
+      await candidatePool.write('Expired', sessionId, { ttl: 100 });
 
       // 启动定时清理（每 200ms）
       ttlManager.schedule(200);
@@ -117,8 +117,8 @@ describe('TTLManager', () => {
     it('should return cleanup statistics', async () => {
       const sessionId = 'session-123';
 
-      await shortTerm.write('Expired 1', sessionId, { ttl: 100 });
-      await shortTerm.write('Expired 2', sessionId, { ttl: 100 });
+      await candidatePool.write('Expired 1', sessionId, { ttl: 100 });
+      await candidatePool.write('Expired 2', sessionId, { ttl: 100 });
 
       await new Promise(resolve => setTimeout(resolve, 150));
 

@@ -9,7 +9,7 @@
 /**
  * 记忆类型
  */
-export type MemoryType = 'short-term' | 'long-term';
+export type MemoryType = 'candidate' | 'long-term';
 
 /**
  * 记忆元数据

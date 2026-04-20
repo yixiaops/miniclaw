@@ -68,7 +68,7 @@ export class FeishuClient {
       }
     );
 
-    const data: FeishuApiResponse = await response.json();
+    const data = await response.json() as FeishuApiResponse;
 
     if (data.code !== 0) {
       throw new Error(`获取 token 失败: ${data.msg || `code ${data.code}`}`);
@@ -129,7 +129,7 @@ export class FeishuClient {
       }
     );
 
-    const data: FeishuApiResponse = await response.json();
+    const data = await response.json() as FeishuApiResponse;
 
     if (data.code !== 0) {
       throw new Error(`发送消息失败: ${data.msg || `code ${data.code}`}`);

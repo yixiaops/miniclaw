@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MemorySearchTool } from '../../../src/memory/tools/search.js';
-import { ShortTermMemory } from '../../../src/memory/store/short-term.js';
+import { MemoryCandidatePool } from '../../../src/memory/store/candidate-pool.js';
 import { LongTermMemory } from '../../../src/memory/store/long-term.js';
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
 import { EmbeddingService } from '../../../src/memory/embedding/index.js';
@@ -16,7 +16,7 @@ import * as fs from 'fs/promises';
 
 describe('MemorySearchTool', () => {
   let searchTool: MemorySearchTool;
-  let shortTerm: ShortTermMemory;
+  let candidatePool: MemoryCandidatePool;
   let longTerm: LongTermMemory;
   let sessionManager: SessionManager;
   let embeddingService: EmbeddingService;
@@ -25,14 +25,14 @@ describe('MemorySearchTool', () => {
   beforeEach(async () => {
     await fs.mkdir(testDir, { recursive: true });
     sessionManager = new SessionManager();
-    shortTerm = new ShortTermMemory(sessionManager);
+    candidatePool = new MemoryCandidatePool(sessionManager);
     longTerm = new LongTermMemory(testDir);
     embeddingService = new EmbeddingService();
-    searchTool = new MemorySearchTool(shortTerm, longTerm, embeddingService);
+    searchTool = new MemorySearchTool(candidatePool, longTerm, embeddingService);
   });
 
   afterEach(async () => {
-    shortTerm.clear();
+    candidatePool.clear();
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
@@ -40,7 +40,7 @@ describe('MemorySearchTool', () => {
     it('should search both layers by default', async () => {
       const sessionId = 'session-123';
 
-      await shortTerm.write('Short-term context', sessionId);
+      await candidatePool.write('Short-term context', sessionId);
       await longTerm.write('Long-term context');
 
       const results = await searchTool.search({ query: 'context' });
@@ -52,17 +52,17 @@ describe('MemorySearchTool', () => {
     it('should filter by type', async () => {
       const sessionId = 'session-123';
 
-      await shortTerm.write('Short-term context', sessionId);
+      await candidatePool.write('Short-term context', sessionId);
       await longTerm.write('Long-term context');
 
       // 仅搜索短期记忆
       const shortResults = await searchTool.search({
         query: 'context',
-        types: ['short-term']
+        types: ['candidate']
       });
 
       expect(shortResults.length).toBe(1);
-      expect(shortResults[0].entry.type).toBe('short-term');
+      expect(shortResults[0].entry.type).toBe('candidate');
 
       // 仅搜索长期记忆
       const longResults = await searchTool.search({
@@ -77,9 +77,9 @@ describe('MemorySearchTool', () => {
     it('should limit results', async () => {
       const sessionId = 'session-123';
 
-      await shortTerm.write('Memory 1', sessionId);
-      await shortTerm.write('Memory 2', sessionId);
-      await shortTerm.write('Memory 3', sessionId);
+      await candidatePool.write('Memory 1', sessionId);
+      await candidatePool.write('Memory 2', sessionId);
+      await candidatePool.write('Memory 3', sessionId);
 
       const results = await searchTool.search({ query: 'Memory', limit: 2 });
 
@@ -90,8 +90,8 @@ describe('MemorySearchTool', () => {
       const session1 = 'session-1';
       const session2 = 'session-2';
 
-      await shortTerm.write('Session 1 context', session1);
-      await shortTerm.write('Session 2 context', session2);
+      await candidatePool.write('Session 1 context', session1);
+      await candidatePool.write('Session 2 context', session2);
 
       const results = await searchTool.search({
         query: 'context',
@@ -104,7 +104,7 @@ describe('MemorySearchTool', () => {
 
     it('should return empty array for no matches', async () => {
       const sessionId = 'session-123';
-      await shortTerm.write('Some content', sessionId);
+      await candidatePool.write('Some content', sessionId);
 
       const results = await searchTool.search({ query: 'nonexistent' });
 
@@ -142,7 +142,7 @@ describe('MemorySearchTool', () => {
     it('should return search statistics', async () => {
       const sessionId = 'session-123';
 
-      await shortTerm.write('Test', sessionId);
+      await candidatePool.write('Test', sessionId);
       await longTerm.write('Test');
 
       await searchTool.search({ query: 'Test' });

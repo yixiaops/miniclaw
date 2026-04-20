@@ -37,7 +37,7 @@ describe('MemoryManager', () => {
 
       const status = manager.getStatus();
       expect(status.ttlRunning).toBe(true);
-      expect(status.shortTermCount).toBe(0);
+      expect(status.candidatePoolCount).toBe(0);
       expect(status.longTermCount).toBe(0);
     });
   });
@@ -50,7 +50,7 @@ describe('MemoryManager', () => {
       expect(id).toBeDefined();
 
       const status = manager.getStatus();
-      expect(status.shortTermCount).toBe(1);
+      expect(status.candidatePoolCount).toBe(1);
     });
 
     it('should write with custom importance', async () => {
