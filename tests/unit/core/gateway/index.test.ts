@@ -58,8 +58,8 @@ describe('MiniclawGateway', () => {
     gateway = new MiniclawGateway(mockConfig, { createAgentFn });
   });
 
-  afterEach(() => {
-    gateway.cleanup();
+  afterEach(async () => {
+    await gateway.cleanup();
   });
 
   describe('handleMessage', () => {
@@ -140,7 +140,7 @@ describe('MiniclawGateway', () => {
       // 默认 byUser 策略下，不同用户会创建不同的 agent
       expect(groupCreateAgentFn).toHaveBeenCalledTimes(2);
 
-      gatewayWithGroupStrategy.cleanup();
+      await gatewayWithGroupStrategy.cleanup();
     });
 
     it('应该传递正确的上下文给 Agent', async () => {
@@ -195,7 +195,7 @@ describe('MiniclawGateway', () => {
       };
 
       await gateway.handleMessage(ctx);
-      gateway.cleanup();
+      await gateway.cleanup();
 
       const status = gateway.getStatus();
       expect(status.agentCount).toBe(0);
@@ -232,7 +232,7 @@ describe('MiniclawGateway', () => {
       await initGateway.handleMessage({ channel: 'cli', content: 'test message' });
 
       // 清理资源但保留存储
-      initGateway.cleanup();
+      await initGateway.cleanup();
 
       // 创建新的 gateway 实例来模拟重启
       const newCreateAgentFn = vi.fn(() => createMockAgent());
@@ -247,7 +247,7 @@ describe('MiniclawGateway', () => {
       const status = newGateway.getStatus();
       expect(status.sessionCount).toBe(1);
 
-      newGateway.cleanup();
+      await newGateway.cleanup();
     });
 
     it('应该处理空存储', async () => {
@@ -263,7 +263,7 @@ describe('MiniclawGateway', () => {
       const status = emptyGateway.getStatus();
       expect(status.sessionCount).toBe(0);
 
-      emptyGateway.cleanup();
+      await emptyGateway.cleanup();
     });
   });
 

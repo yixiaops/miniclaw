@@ -339,7 +339,14 @@ export class MiniclawGateway {
   /**
    * 清理所有资源
    */
-  cleanup(): void {
+  async cleanup(): Promise<void> {
+    // 先持久化记忆数据（静默降级）
+    try {
+      await this.memoryManager?.persist();
+    } catch {
+      // 静默降级，不抛异常
+    }
+    // 然后销毁资源
     this.agentRegistry.destroyAll();
     // SessionManager 没有destroyAll，需要逐个清理
     const sessions = this.sessionManager.getAll();

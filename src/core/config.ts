@@ -137,7 +137,7 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   dir: './memory-storage',
   defaultTTL: 24 * 60 * 60 * 1000,  // 24h
   cleanupInterval: 60 * 60 * 1000,   // 1h
-  promotionThreshold: 0.5,
+  promotionThreshold: 0.3,
   defaultImportance: 0.3,
   injectContext: false
 };
