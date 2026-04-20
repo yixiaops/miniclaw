@@ -12,6 +12,7 @@ import { MemoryCandidatePool } from '../../../src/memory/store/candidate-pool.js
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
 import { MemoryPromoter } from '../../../src/memory/promotion/promoter.js';
 import { LongTermMemory } from '../../../src/memory/store/long-term.js';
+import { SessionCompressor } from '../../../src/memory/session/compressor.js';
 
 describe('TTLManager', () => {
   let ttlManager: TTLManager;
@@ -19,6 +20,7 @@ describe('TTLManager', () => {
   let sessionManager: SessionManager;
   let promoter: MemoryPromoter;
   let longTerm: LongTermMemory;
+  let compressor: SessionCompressor;
   const testDir = '/tmp/miniclaw-ttl-test';
 
   beforeEach(() => {
@@ -26,11 +28,16 @@ describe('TTLManager', () => {
     candidatePool = new MemoryCandidatePool(sessionManager);
     longTerm = new LongTermMemory(testDir);
     promoter = new MemoryPromoter(candidatePool, longTerm);
-    ttlManager = new TTLManager(candidatePool, promoter);
+    compressor = new SessionCompressor();
+    ttlManager = new TTLManager(candidatePool, promoter, {
+      sessionManager,
+      compressor
+    });
   });
 
   afterEach(() => {
     ttlManager.stop();
+    ttlManager.stopCompression(); // 停止压缩定时器
     candidatePool.clear();
   });
 
@@ -136,6 +143,57 @@ describe('TTLManager', () => {
       ttlManager.setDefaultTTL(3600000); // 1 hour
 
       expect(ttlManager.getDefaultTTL()).toBe(3600000);
+    });
+  });
+
+  describe('session compression', () => {
+    it('should trigger session compression periodically', async () => {
+      // 创建活跃 Session
+      const sessionId = sessionManager.create();
+
+      // 模拟 Session 有大量消息（通过直接操作）
+      // TTLManager 需要能够压缩这些消息
+
+      // 启动压缩定时器（每 200ms）
+      ttlManager.scheduleCompression(200);
+
+      expect(ttlManager.isCompressionRunning()).toBe(true);
+
+      // 等待至少一次压缩执行
+      await new Promise(resolve => setTimeout(resolve, 400));
+
+      const stats = ttlManager.getCompressionStats();
+      expect(stats.compressions).toBeGreaterThanOrEqual(1);
+
+      ttlManager.stopCompression();
+    });
+
+    it('should respect compressInterval config', () => {
+      // 使用自定义压缩间隔
+      ttlManager.scheduleCompression(5000);
+
+      expect(ttlManager.getCompressInterval()).toBe(5000);
+
+      ttlManager.stopCompression();
+    });
+
+    it('should compress all active sessions', async () => {
+      // 创建多个活跃 Session
+      const session1 = sessionManager.create();
+      const session2 = sessionManager.create();
+
+      // 确保都是活跃的
+      sessionManager.updateActivity(session1);
+      sessionManager.updateActivity(session2);
+
+      // 执行一次性压缩
+      const result = await ttlManager.compressActiveSessions();
+
+      expect(result.sessionsCompressed).toBe(2);
+    });
+
+    it('should use default compressInterval of 1 hour', () => {
+      expect(ttlManager.getDefaultCompressInterval()).toBe(3600000);
     });
   });
 });

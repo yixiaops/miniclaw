@@ -6,7 +6,7 @@
  * @module tests/unit/store/candidate-pool.test
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MemoryCandidatePool } from '../../../src/memory/store/candidate-pool.js';
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
 
@@ -139,6 +139,163 @@ describe('MemoryCandidatePool', () => {
 
       const isExpired = candidatePool.isExpired(id);
       expect(isExpired).toBe(false);
+    });
+  });
+
+  // T002-T004: 容量上限测试
+  describe('capacity limits', () => {
+    it('should have maxEntries property (default 500)', () => {
+      expect(candidatePool.maxEntries).toBe(500);
+    });
+
+    it('should have evictCount property (default 50)', () => {
+      expect(candidatePool.evictCount).toBe(50);
+    });
+
+    it('should have instantPromoteThreshold property (default 0.5)', () => {
+      expect(candidatePool.instantPromoteThreshold).toBe(0.5);
+    });
+
+    it('should not evict when below maxEntries', async () => {
+      const sessionId = 'session-123';
+      // 写入少量条目
+      for (let i = 0; i < 10; i++) {
+        await candidatePool.write(`Content ${i}`, sessionId);
+      }
+
+      const stats = candidatePool.getStats();
+      expect(stats.total).toBe(10);
+    });
+
+    it('should respect config.maxEntries override', () => {
+      const customPool = new MemoryCandidatePool(sessionManager, {
+        maxEntries: 100,
+        evictCount: 10
+      });
+      expect(customPool.maxEntries).toBe(100);
+      expect(customPool.evictCount).toBe(10);
+    });
+  });
+
+  describe('evictLowImportance', () => {
+    it('should sort entries by importance before evicting', async () => {
+      const sessionId = 'session-123';
+      // 写入不同 importance 的条目
+      await candidatePool.write('Low importance', sessionId, { importance: 0.1 });
+      await candidatePool.write('High importance', sessionId, { importance: 0.9 });
+      await candidatePool.write('Medium importance', sessionId, { importance: 0.5 });
+
+      candidatePool.evictLowImportance(1);
+
+      const entries = await candidatePool.list(sessionId);
+      expect(entries.length).toBe(2);
+      // 低 importance 应被删除
+      expect(entries.find(e => e.content === 'Low importance')).toBeUndefined();
+    });
+
+    it('should delete exact count of entries', async () => {
+      const sessionId = 'session-123';
+      for (let i = 0; i < 5; i++) {
+        await candidatePool.write(`Content ${i}`, sessionId, { importance: i * 0.2 });
+      }
+
+      candidatePool.evictLowImportance(2);
+
+      const entries = await candidatePool.list(sessionId);
+      expect(entries.length).toBe(3);
+    });
+
+    it('should handle entries without importance (treat as 0)', async () => {
+      const sessionId = 'session-123';
+      // 无 importance 的条目（默认 0）
+      await candidatePool.write('No importance', sessionId);
+      await candidatePool.write('Has importance', sessionId, { importance: 0.8 });
+
+      candidatePool.evictLowImportance(1);
+
+      const entries = await candidatePool.list(sessionId);
+      expect(entries.length).toBe(1);
+      expect(entries[0].content).toBe('Has importance');
+    });
+
+    it('should not delete if count > store.size', async () => {
+      const sessionId = 'session-123';
+      await candidatePool.write('Only one', sessionId);
+
+      candidatePool.evictLowImportance(10);
+
+      const entries = await candidatePool.list(sessionId);
+      expect(entries.length).toBe(1);
+    });
+  });
+
+  describe('write with capacity check', () => {
+    it('should trigger eviction when at capacity', async () => {
+      // 创建容量为 10 的池
+      const smallPool = new MemoryCandidatePool(sessionManager, {
+        maxEntries: 10,
+        evictCount: 2
+      });
+
+      const sessionId = 'session-123';
+      // 写入 10 条低 importance
+      for (let i = 0; i < 10; i++) {
+        await smallPool.write(`Low ${i}`, sessionId, { importance: 0.1 });
+      }
+
+      // 再写入一条，应触发清理
+      await smallPool.write('New entry', sessionId, { importance: 0.5 });
+
+      const stats = smallPool.getStats();
+      // 10 - 2 + 1 = 9
+      expect(stats.total).toBe(9);
+    });
+
+    it('should keep high importance entries when evicting', async () => {
+      const smallPool = new MemoryCandidatePool(sessionManager, {
+        maxEntries: 10,
+        evictCount: 2
+      });
+
+      const sessionId = 'session-123';
+      // 写入低 importance
+      for (let i = 0; i < 8; i++) {
+        await smallPool.write(`Low ${i}`, sessionId, { importance: 0.1 });
+      }
+      // 写入高 importance
+      await smallPool.write('High 1', sessionId, { importance: 0.9 });
+      await smallPool.write('High 2', sessionId, { importance: 0.8 });
+
+      // 触发清理（写入新条目）
+      await smallPool.write('New', sessionId, { importance: 0.5 });
+
+      const entries = await smallPool.list(sessionId);
+      const highEntries = entries.filter(e => e.content.startsWith('High'));
+      expect(highEntries.length).toBe(2);
+    });
+
+    it('should instantly promote when importance >= 0.5', async () => {
+      const sessionId = 'session-123';
+      const mockPromoter = {
+        promote: vi.fn().mockResolvedValue(undefined)
+      };
+
+      candidatePool.setPromoter(mockPromoter);
+      await candidatePool.write('High importance', sessionId, { importance: 0.6 });
+
+      expect(mockPromoter.promote).toHaveBeenCalled();
+    });
+
+    it('should not instantly promote when importance < 0.5', async () => {
+      const sessionId = 'session-123';
+      const mockPromoter = {
+        promote: vi.fn().mockResolvedValue(undefined)
+      };
+
+      candidatePool.setPromoter(mockPromoter);
+      await candidatePool.write('Low importance', sessionId, { importance: 0.3 });
+
+      expect(mockPromoter.promote).not.toHaveBeenCalled();
     });
   });
 });

@@ -72,6 +72,92 @@ describe('Config.memory', () => {
     });
   });
 
+  describe('Memory optimization config', () => {
+    describe('SessionConfig', () => {
+      it('should have session config with maxFullMessages', () => {
+        const config: MemoryConfig = {
+          session: {
+            maxFullMessages: 50,
+            maxSummaryBatches: 15,
+            compressInterval: 3600000
+          }
+        };
+        expect(config.session?.maxFullMessages).toBe(50);
+      });
+
+      it('should have session config with maxSummaryBatches', () => {
+        const config: MemoryConfig = {
+          session: {
+            maxFullMessages: 50,
+            maxSummaryBatches: 15,
+            compressInterval: 3600000
+          }
+        };
+        expect(config.session?.maxSummaryBatches).toBe(15);
+      });
+
+      it('should have session config with compressInterval', () => {
+        const config: MemoryConfig = {
+          session: {
+            maxFullMessages: 50,
+            maxSummaryBatches: 15,
+            compressInterval: 3600000
+          }
+        };
+        expect(config.session?.compressInterval).toBe(3600000);
+      });
+    });
+
+    describe('CandidatePoolConfig', () => {
+      it('should have candidatePool config with maxEntries', () => {
+        const config: MemoryConfig = {
+          candidatePool: {
+            maxEntries: 500,
+            evictCount: 50,
+            instantPromoteThreshold: 0.5
+          }
+        };
+        expect(config.candidatePool?.maxEntries).toBe(500);
+      });
+
+      it('should have candidatePool config with evictCount', () => {
+        const config: MemoryConfig = {
+          candidatePool: {
+            maxEntries: 500,
+            evictCount: 50,
+            instantPromoteThreshold: 0.5
+          }
+        };
+        expect(config.candidatePool?.evictCount).toBe(50);
+      });
+
+      it('should have candidatePool config with instantPromoteThreshold', () => {
+        const config: MemoryConfig = {
+          candidatePool: {
+            maxEntries: 500,
+            evictCount: 50,
+            instantPromoteThreshold: 0.5
+          }
+        };
+        expect(config.candidatePool?.instantPromoteThreshold).toBe(0.5);
+      });
+    });
+
+    describe('DEFAULT_MEMORY_CONFIG defaults', () => {
+      it('should have default session config values', () => {
+        expect(DEFAULT_MEMORY_CONFIG.session?.maxFullMessages).toBe(50);
+        expect(DEFAULT_MEMORY_CONFIG.session?.maxSummaryBatches).toBe(15);
+        expect(DEFAULT_MEMORY_CONFIG.session?.compressInterval).toBe(3600000);
+      });
+
+      it('should have default candidatePool config values', () => {
+        expect(DEFAULT_MEMORY_CONFIG.candidatePool?.maxEntries).toBe(500);
+        expect(DEFAULT_MEMORY_CONFIG.candidatePool?.evictCount).toBe(50);
+        expect(DEFAULT_MEMORY_CONFIG.candidatePool?.instantPromoteThreshold).toBe(0.5);
+      });
+    });
+  });
+
   describe('Config integration', () => {
     it('should include memory config in Config interface', () => {
       const config: Config = {
