@@ -110,6 +110,30 @@ export interface SkillsConfig {
 }
 
 /**
+ * Session 压缩配置
+ */
+export interface SessionCompressConfig {
+  /** 保留完整消息的最大条数，默认 50 */
+  maxFullMessages?: number;
+  /** 摘要批次最大数量，默认 15 */
+  maxSummaryBatches?: number;
+  /** 定时压缩间隔（毫秒），默认 1h */
+  compressInterval?: number;
+}
+
+/**
+ * CandidatePool 配置
+ */
+export interface CandidatePoolConfig {
+  /** 容量上限，默认 500 */
+  maxEntries?: number;
+  /** 清理条数，默认 50 */
+  evictCount?: number;
+  /** 即时晋升阈值，默认 0.5 */
+  instantPromoteThreshold?: number;
+}
+
+/**
  * 记忆系统配置
  */
 export interface MemoryConfig {
@@ -127,6 +151,10 @@ export interface MemoryConfig {
   defaultImportance?: number;
   /** 是否注入记忆上下文到 Agent 系统提示词 */
   injectContext?: boolean;
+  /** Session 压缩配置 */
+  session?: SessionCompressConfig;
+  /** CandidatePool 配置 */
+  candidatePool?: CandidatePoolConfig;
 }
 
 /**
@@ -139,7 +167,17 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   cleanupInterval: 60 * 60 * 1000,   // 1h
   promotionThreshold: 0.3,
   defaultImportance: 0.3,
-  injectContext: false
+  injectContext: false,
+  session: {
+    maxFullMessages: 50,
+    maxSummaryBatches: 15,
+    compressInterval: 3600000  // 1h
+  },
+  candidatePool: {
+    maxEntries: 500,
+    evictCount: 50,
+    instantPromoteThreshold: 0.5
+  }
 };
 
 /**
@@ -244,7 +282,17 @@ export function loadConfig(): Config {
           cleanupInterval: jsonConfig.memory.cleanupInterval ?? DEFAULT_MEMORY_CONFIG.cleanupInterval,
           promotionThreshold: jsonConfig.memory.promotionThreshold ?? DEFAULT_MEMORY_CONFIG.promotionThreshold,
           defaultImportance: jsonConfig.memory.defaultImportance ?? DEFAULT_MEMORY_CONFIG.defaultImportance,
-          injectContext: jsonConfig.memory.injectContext ?? DEFAULT_MEMORY_CONFIG.injectContext
+          injectContext: jsonConfig.memory.injectContext ?? DEFAULT_MEMORY_CONFIG.injectContext,
+          session: {
+            maxFullMessages: jsonConfig.memory.session?.maxFullMessages ?? DEFAULT_MEMORY_CONFIG.session?.maxFullMessages,
+            maxSummaryBatches: jsonConfig.memory.session?.maxSummaryBatches ?? DEFAULT_MEMORY_CONFIG.session?.maxSummaryBatches,
+            compressInterval: jsonConfig.memory.session?.compressInterval ?? DEFAULT_MEMORY_CONFIG.session?.compressInterval
+          },
+          candidatePool: {
+            maxEntries: jsonConfig.memory.candidatePool?.maxEntries ?? DEFAULT_MEMORY_CONFIG.candidatePool?.maxEntries,
+            evictCount: jsonConfig.memory.candidatePool?.evictCount ?? DEFAULT_MEMORY_CONFIG.candidatePool?.evictCount,
+            instantPromoteThreshold: jsonConfig.memory.candidatePool?.instantPromoteThreshold ?? DEFAULT_MEMORY_CONFIG.candidatePool?.instantPromoteThreshold
+          }
         };
         console.log(`[Config] 从 ${configPath} 加载了记忆配置: enabled=${config.memory.enabled}, dir=${config.memory.dir}`);
       }

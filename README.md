@@ -18,98 +18,55 @@
 
 ## 记忆系统
 
-Miniclaw 采用双层记忆结构，参考 OpenClaw 设计：
+Miniclaw 采用三层记忆结构，区分对话历史和晋升候选池：
 
-```
-┌───────────────────────────────────────────────────────┐
-│                  记忆系统架构                          │
-├───────────────────────────────────────────────────────┤
-│                                                       │
-│  ┌─────────────────────┐  ┌─────────────────────┐    │
-│  │   Short-term        │  │   Long-term         │    │
-│  │   短期记忆          │  │   长期记忆          │    │
-│  │                     │  │                     │    │
-│  │  - 会话上下文        │  │  - 用户偏好         │    │
-│  │  - 临时决策          │  │  - 重要决策         │    │
-│  │  - TTL 24h           │  │  - 工作记录         │    │
-│  │  - Session隔离       │  │  - 持久化存储       │    │
-│  └─────────────────────┘  └─────────────────────┘    │
-│           │                          │               │
-│           └──────────┬────────────────┘               │
-│                      ▼                                │
-│          ┌─────────────────────┐                      │
-│          │   MemoryPromoter    │                      │
-│          │                     │                      │
-│          │  - 重要性晋升        │                      │
-│          │  - TTL清理           │                      │
-│          │  - 自动迁移          │                      │
-│          └─────────────────────┘                      │
-│                                                       │
-└───────────────────────────────────────────────────────┘
-```
+### 第一层：对话历史（Session.json）- 真正的短期记忆
+
+- **存储位置**: `~/.miniclaw/sessions/*.json`
+- **内容**: 完整对话历史（role + content + timestamp）
+- **写入时机**: 每次对话立即写入
+- **持久化**: ✅ 文件持久化，重启可恢复
+- **用途**: 恢复对话上下文
+
+### 第二层：晋升候选池（MemoryCandidatePool）- 待晋升记忆
+
+- **存储位置**: 内存 Map（不持久化）
+- **内容**: 候选记忆内容 + importance + TTL（24h）
+- **写入时机**: 每次对话同时写入内存
+- **持久化**: ❌ 内存 Map，重启丢失
+- **用途**: 等待 TTLManager 判断是否晋升
+
+### 第三层：长期记忆（LongTermMemory）- 持久化存储
+
+- **存储位置**: `~/.miniclaw/memory-storage/`
+- **内容**: MEMORY.md（可读）+ long-term.json（程序读取）
+- **写入时机**: TTL 清理时晋升写入
+- **持久化**: ✅ 文件持久化
+- **用途**: 跨 Session 知识检索
+
+### 三层对比
+
+| 维度 | Session.json | CandidatePool | LongTermMemory |
+|------|-------------|---------------|----------------|
+| **存储** | 文件（持久化） | 内存 Map | 文件（持久化） |
+| **写入时机** | 每次对话立即 | 每次对话同时 | TTL 清理晋升 |
+| **重启恢复** | ✅ 可恢复 | ❌ 丢失 | ✅ 可恢复 |
+| **生命周期** | 永久保存 | 24h TTL 或晋升 | 永久保存 |
+| **用途** | 对话上下文 | 晋升前缓存 | 跨 Session 知识 |
 
 ### 核心模块
 
 | 模块 | 功能 | 文件 |
 |------|------|------|
-| **ShortTermMemory** | 短期记忆存储（Session隔离） | `src/memory/store/short-term.ts` |
+| **SimpleMemoryStorage** | 对话历史存储（Session.json） | `src/core/memory/simple.ts` |
+| **MemoryCandidatePool** | 晋升候选池（内存 Map） | `src/memory/store/candidate-pool.ts` |
 | **LongTermMemory** | 长期记忆持久化 | `src/memory/store/long-term.ts` |
 | **SessionManager** | Session 生命周期管理 | `src/memory/store/session-manager.ts` |
-| **TTLManager** | TTL 过期清理 | `src/memory/store/ttl-manager.ts` |
+| **TTLManager** | TTL 过期清理 + 触发晋升 | `src/memory/store/ttl-manager.ts` |
 | **MemoryPromoter** | 记忆晋升机制 | `src/memory/promotion/promoter.ts` |
-| **MemorySearchTool** | 双层检索工具 | `src/memory/tools/search.ts` |
-| **EmbeddingService** | 向量嵌入服务 | `src/memory/embedding/` |
-| **DeduplicationChecker** | 去重检查器 | `src/memory/write/` |
-| **SensitiveDetector** | 敏感信息检测 | `src/memory/write/` |
-| **MemoryWriteTool** | 写入工具接口 | `src/memory/tools/` |
+| **AutoMemoryWriter** | 自动写入对话到候选池 | `src/memory/auto-writer.ts` |
+| **MemoryManager** | 统一入口，协调各组件 | `src/memory/manager.ts` |
 
-### 使用示例
-
-```typescript
-import { ShortTermMemory } from './memory/store/short-term.js';
-import { LongTermMemory } from './memory/store/long-term.js';
-import { MemoryPromoter } from './memory/promotion/promoter.js';
-import { TTLManager } from './memory/store/ttl-manager.js';
-import { MemorySearchTool } from './memory/tools/search.js';
-
-// 初始化组件
-const sessionManager = new SessionManager();
-const shortTerm = new ShortTermMemory(sessionManager);
-const longTerm = new LongTermMemory('./memory');
-const promoter = new MemoryPromoter(shortTerm, longTerm);
-const ttlManager = new TTLManager(shortTerm, promoter);
-const searchTool = new MemorySearchTool(shortTerm, longTerm, embeddingService);
-
-// 写入短期记忆
-const sessionId = sessionManager.create();
-await shortTerm.write('User context', sessionId, { importance: 0.8 });
-
-// 晋升重要记忆
-await promoter.promoteAll();
-
-// 搜索
-const results = await searchTool.search({ query: 'User' });
-```
-
-### 记忆晋升规则
-
-- **重要性阈值**: 0.5（可配置）
-- **晋升时机**: TTL过期前自动检查
-- **晋升后**: 从短期记忆移除，持久化到长期记忆
-
-### TTL 清理
-
-- **默认 TTL**: 24 小时
-- **清理间隔**: 1 小时
-- **清理策略**: 过期前检查重要性，决定晋升或删除
-
-### 文档
-
-详细文档：
-- [API文档](docs/api/memory-write.md)
-- [架构设计](docs/architecture/dual-layer.md)
-
----
 
 ## 架构设计
 

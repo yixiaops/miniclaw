@@ -35,6 +35,23 @@ interface StorageData {
 }
 
 /**
+ * 压缩器接口
+ */
+export interface Compressor {
+  compress(session: { messages: Message[] }): Promise<{ messages: Message[] }>;
+}
+
+/**
+ * SimpleMemoryStorage 配置选项
+ */
+export interface SimpleMemoryStorageOptions {
+  /** 压缩器实例 */
+  compressor?: Compressor;
+  /** 压缩阈值（消息数量超过此值触发压缩） */
+  compressionThreshold?: number;
+}
+
+/**
  * SimpleMemoryStorage 类
  *
  * 提供对话历史的持久化存储功能。
@@ -72,14 +89,21 @@ interface StorageData {
 export class SimpleMemoryStorage {
   /** 存储目录 */
   private storageDir: string;
+  /** 压缩器实例 */
+  private compressor?: Compressor;
+  /** 压缩阈值 */
+  private compressionThreshold: number;
 
   /**
    * 创建 SimpleMemoryStorage 实例
    *
    * @param storageDir - 存储目录路径（默认为 ~/.miniclaw/sessions/）
+   * @param options - 配置选项
    */
-  constructor(storageDir?: string) {
+  constructor(storageDir?: string, options?: SimpleMemoryStorageOptions) {
     this.storageDir = storageDir || join(process.env.HOME || '', '.miniclaw', 'sessions');
+    this.compressor = options?.compressor;
+    this.compressionThreshold = options?.compressionThreshold ?? 200;
   }
 
   /**
@@ -136,6 +160,8 @@ export class SimpleMemoryStorage {
   /**
    * 加载 Session 的对话历史
    *
+   * 如果配置了压缩器且消息数量超过阈值，会自动触发压缩并保存。
+   *
    * @param sessionKey - Session Key
    * @returns 消息列表，如果不存在则返回空数组
    */
@@ -145,7 +171,17 @@ export class SimpleMemoryStorage {
     try {
       const content = await readFile(filePath, 'utf-8');
       const data: StorageData = JSON.parse(content);
-      return data.messages;
+      let messages = data.messages;
+
+      // 检查是否需要压缩
+      if (this.compressor && messages.length > this.compressionThreshold) {
+        const compressed = await this.compressor.compress({ messages });
+        messages = compressed.messages;
+        // 压缩后立即保存
+        await this.save(sessionKey, messages);
+      }
+
+      return messages;
     } catch {
       // 文件不存在或解析失败，返回空数组
       return [];
