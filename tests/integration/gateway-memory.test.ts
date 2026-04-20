@@ -60,7 +60,7 @@ describe('Gateway with MemoryManager', () => {
 
   afterEach(async () => {
     memoryManager.destroy();
-    gateway.cleanup();
+    await gateway.cleanup();
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -100,7 +100,7 @@ describe('Gateway with MemoryManager', () => {
       const response = await gatewayNoMemory.handleMessage(ctx);
       expect(response.content).toBe('test response');
 
-      gatewayNoMemory.cleanup();
+      await gatewayNoMemory.cleanup();
     });
 
     it('should not block on memory write failure', async () => {
@@ -129,7 +129,7 @@ describe('Gateway with MemoryManager', () => {
       const response = await gatewayWithFailure.handleMessage(ctx);
       expect(response.content).toBe('test response');
 
-      gatewayWithFailure.cleanup();
+      await gatewayWithFailure.cleanup();
     });
 
     it('should write both user and assistant messages', async () => {
@@ -166,7 +166,7 @@ describe('Gateway with MemoryManager', () => {
       expect(response).toBeDefined();
       expect(response.content).toBe('response');
 
-      gatewaySimple.cleanup();
+      await gatewaySimple.cleanup();
     });
   });
 });

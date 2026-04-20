@@ -20,6 +20,54 @@ import { FeishuChannel } from './channels/feishu.js';
 import { getBuiltinTools, filterToolsByPolicy } from './tools/index.js';
 
 /**
+ * Shutdown handler 配置
+ */
+export interface ShutdownHandlerConfig {
+  /** 通道实例 */
+  channel: { stop: () => Promise<void> | void };
+  /** Gateway 实例 */
+  gateway: MiniclawGateway;
+  /** 子代理管理器 */
+  subagentManager: SubagentManager;
+  /** 记忆管理器（可选） */
+  memoryManager?: MemoryManager;
+}
+
+/**
+ * 创建并返回 shutdown handler 函数
+ *
+ * 正确的处理顺序：
+ * 1. await channel.stop() - 停止接收新消息
+ * 2. await gateway.cleanup() - 持久化数据并清理资源
+ * 3. subagentManager.destroy() - 销毁子代理
+ * 4. memoryManager.destroy() - 销毁记忆管理器
+ *
+ * @param config - Shutdown handler 配置
+ * @returns shutdown handler 函数
+ */
+export function setupShutdownHandler(config: ShutdownHandlerConfig): () => Promise<void> {
+  const { channel, gateway, subagentManager, memoryManager } = config;
+
+  return async () => {
+    console.log('\n正在关闭...');
+
+    // 1. 停止通道
+    await channel.stop();
+
+    // 2. 清理 Gateway（包含 persist）
+    await gateway.cleanup();
+
+    // 3. 销毁子代理管理器
+    subagentManager.destroy();
+
+    // 4. 销毁记忆管理器（如果存在）
+    if (memoryManager) {
+      memoryManager.destroy();
+    }
+  };
+}
+
+/**
  * 创建 Agent 的工厂函数
  *
  * @param registry - Agent 注册表

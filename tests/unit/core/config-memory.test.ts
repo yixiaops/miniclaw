@@ -6,8 +6,26 @@
 
 import { describe, it, expect } from 'vitest';
 import type { MemoryConfig, Config } from '../../../src/core/config.js';
+import { DEFAULT_MEMORY_CONFIG } from '../../../src/core/config.js';
 
 describe('Config.memory', () => {
+  describe('DEFAULT_MEMORY_CONFIG', () => {
+    it('should have promotionThreshold <= defaultImportance for proper memory promotion', () => {
+      // 背景：临时记忆晋升到长期记忆时，重要性分数需要达到 promotionThreshold
+      // 如果 promotionThreshold > defaultImportance，新记忆的默认重要性分数
+      // 将永远无法满足晋升条件，导致记忆无法正确晋升
+      expect(DEFAULT_MEMORY_CONFIG.promotionThreshold).toBeLessThanOrEqual(
+        DEFAULT_MEMORY_CONFIG.defaultImportance
+      );
+    });
+
+    it('should have sensible default values', () => {
+      expect(DEFAULT_MEMORY_CONFIG.enabled).toBe(false);
+      expect(DEFAULT_MEMORY_CONFIG.defaultTTL).toBe(24 * 60 * 60 * 1000); // 24h
+      expect(DEFAULT_MEMORY_CONFIG.cleanupInterval).toBe(60 * 60 * 1000); // 1h
+    });
+  });
+
   describe('MemoryConfig interface', () => {
     it('should parse memory config from JSON', () => {
       const json = {

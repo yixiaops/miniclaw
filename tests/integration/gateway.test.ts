@@ -87,7 +87,7 @@ describe('Gateway Integration', () => {
   });
 
   afterEach(async () => {
-    gateway.cleanup();
+    await gateway.cleanup();
     await rm(tempDir, { recursive: true, force: true });
   });
 
@@ -323,7 +323,7 @@ describe('Gateway Integration', () => {
       const statusBefore = gateway.getStatus();
       expect(statusBefore.agentCount).toBe(3);
 
-      gateway.cleanup();
+      await gateway.cleanup();
 
       const statusAfter = gateway.getStatus();
       expect(statusAfter.agentCount).toBe(0);
@@ -356,7 +356,7 @@ describe('Gateway Integration', () => {
       expect(messages[0].role).toBe('user');
       expect(messages[0].content).toBe('测试消息');
 
-      persistGateway.cleanup();
+      await persistGateway.cleanup();
     });
 
     it('应该能够从持久化存储恢复对话历史', async () => {
@@ -376,7 +376,7 @@ describe('Gateway Integration', () => {
         content: '第二条消息'
       });
 
-      gateway1.cleanup();
+      await gateway1.cleanup();
 
       // 第二步：创建新的 Gateway 实例（模拟重启）
       const createAgentFn2 = () => createMockAgent();
@@ -397,7 +397,7 @@ describe('Gateway Integration', () => {
       expect(session!.messages[0].content).toBe('第一条消息');
       expect(session!.messages[2].content).toBe('第二条消息');
 
-      gateway2.cleanup();
+      await gateway2.cleanup();
     });
 
     it('初始化时应该输出加载的 Session 数量', async () => {
@@ -430,7 +430,7 @@ describe('Gateway Integration', () => {
       // 验证日志输出
       expect(logs.some(log => log.includes('从记忆加载了') && log.includes('Session'))).toBe(true);
 
-      newGateway.cleanup();
+      await newGateway.cleanup();
     });
   });
 });
