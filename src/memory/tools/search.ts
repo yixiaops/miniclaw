@@ -7,7 +7,7 @@
  */
 
 import type { MemoryEntry, SearchResult } from '../store/interface.js';
-import type { ShortTermMemory } from '../store/short-term.js';
+import type { MemoryCandidatePool } from '../store/candidate-pool.js';
 import type { LongTermMemory } from '../store/long-term.js';
 import type { IEmbeddingService } from '../embedding/interface.js';
 
@@ -18,7 +18,7 @@ interface SearchParams {
   /** 搜索查询 */
   query: string;
   /** 记忆类型过滤 */
-  types?: ('short-term' | 'long-term')[];
+  types?: ('candidate' | 'long-term')[];
   /** Session ID 过滤（仅短期记忆） */
   sessionId?: string;
   /** 结果数量限制 */
@@ -54,13 +54,13 @@ interface SearchStats {
  *
  * @example
  * ```ts
- * const searchTool = new MemorySearchTool(shortTerm, longTerm, embeddingService);
+ * const searchTool = new MemorySearchTool(candidatePool, longTerm, embeddingService);
  * const results = await searchTool.search({ query: 'user preferences' });
  * ```
  */
 export class MemorySearchTool {
   /** 矩期记忆 */
-  private shortTerm: ShortTermMemory;
+  private candidatePool: MemoryCandidatePool;
   /** 长期记忆 */
   private longTerm: LongTermMemory;
   /** 嵌入服务（预留，未来用于语义搜索） */
@@ -78,11 +78,11 @@ export class MemorySearchTool {
    * 创建检索工具
    */
   constructor(
-    shortTerm: ShortTermMemory,
+    candidatePool: MemoryCandidatePool,
     longTerm: LongTermMemory,
     embeddingService: IEmbeddingService
   ) {
-    this.shortTerm = shortTerm;
+    this.candidatePool = candidatePool;
     this.longTerm = longTerm;
     this.embeddingService = embeddingService;
   }
@@ -100,9 +100,9 @@ export class MemorySearchTool {
     const allResults: SearchResult[] = [];
 
     // 1. 检索短期记忆
-    if (!types || types.includes('short-term')) {
+    if (!types || types.includes('candidate')) {
       let shortEntries = sessionId
-        ? await this.shortTerm.list(sessionId)
+        ? await this.candidatePool.list(sessionId)
         : await this.getAllShortTerm();
 
       for (const entry of shortEntries) {
@@ -141,11 +141,11 @@ export class MemorySearchTool {
    * 获取所有短期记忆
    */
   private async getAllShortTerm(): Promise<MemoryEntry[]> {
-    const stats = this.shortTerm.getStats();
+    const stats = this.candidatePool.getStats();
     const allEntries: MemoryEntry[] = [];
 
     for (const sessionId of Object.keys(stats.bySession)) {
-      const entries = await this.shortTerm.list(sessionId);
+      const entries = await this.candidatePool.list(sessionId);
       allEntries.push(...entries);
     }
 

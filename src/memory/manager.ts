@@ -6,7 +6,7 @@
  * @module memory/manager
  */
 
-import { ShortTermMemory } from './store/short-term.js';
+import { MemoryCandidatePool } from './store/candidate-pool.js';
 import { LongTermMemory } from './store/long-term.js';
 import { SessionManager } from './store/session-manager.js';
 import { TTLManager } from './store/ttl-manager.js';
@@ -33,8 +33,8 @@ export interface MemoryManagerConfig {
  * 记忆状态
  */
 export interface MemoryStatus {
-  /** 短期记忆总数 */
-  shortTermCount: number;
+  /** 候选池记忆总数 */
+  candidatePoolCount: number;
   /** 长期记忆总数 */
   longTermCount: number;
   /** 各 Session 记忆数 */
@@ -78,7 +78,7 @@ export interface CleanupResult {
  */
 export class MemoryManager {
   private sessionManager: SessionManager;
-  private shortTerm: ShortTermMemory;
+  private candidatePool: MemoryCandidatePool;
   private longTerm: LongTermMemory;
   private promoter: MemoryPromoter;
   private ttlManager: TTLManager;
@@ -92,24 +92,24 @@ export class MemoryManager {
 
     // 初始化所有组件
     this.sessionManager = new SessionManager();
-    this.shortTerm = new ShortTermMemory(this.sessionManager, {
+    this.candidatePool = new MemoryCandidatePool(this.sessionManager, {
       defaultTTL: config.defaultTTL
     });
     this.longTerm = new LongTermMemory(config.storageDir);
     this.embeddingService = new EmbeddingService();
 
-    this.promoter = new MemoryPromoter(this.shortTerm, this.longTerm);
+    this.promoter = new MemoryPromoter(this.candidatePool, this.longTerm);
     if (config.promotionThreshold) {
       this.promoter.setThreshold(config.promotionThreshold);
     }
 
-    this.ttlManager = new TTLManager(this.shortTerm, this.promoter);
+    this.ttlManager = new TTLManager(this.candidatePool, this.promoter);
     if (config.defaultTTL) {
       this.ttlManager.setDefaultTTL(config.defaultTTL);
     }
 
     this.searchTool = new MemorySearchTool(
-      this.shortTerm,
+      this.candidatePool,
       this.longTerm,
       this.embeddingService
     );
@@ -153,7 +153,7 @@ export class MemoryManager {
   ): Promise<string> {
     try {
       const defaultImportance = 0.3;
-      return await this.shortTerm.write(content, sessionId, {
+      return await this.candidatePool.write(content, sessionId, {
         ...metadata,
         importance: metadata?.importance ?? defaultImportance
       });
@@ -252,13 +252,13 @@ export class MemoryManager {
    * @returns 状态信息
    */
   getStatus(): MemoryStatus {
-    const shortStats = this.shortTerm.getStats();
+    const candidateStats = this.candidatePool.getStats();
     const longStats = this.longTerm.getStats();
 
     return {
-      shortTermCount: shortStats.total,
+      candidatePoolCount: candidateStats.total,
       longTermCount: longStats.total,
-      bySession: shortStats.bySession,
+      bySession: candidateStats.bySession,
       avgImportance: longStats.avgImportance,
       ttlRunning: this.ttlManager.isRunning()
     };
@@ -269,7 +269,7 @@ export class MemoryManager {
    */
   destroy(): void {
     this.ttlManager.stop();
-    this.shortTerm.clear();
+    this.candidatePool.clear();
     this.longTerm.clear();
     this.initialized = false;
   }

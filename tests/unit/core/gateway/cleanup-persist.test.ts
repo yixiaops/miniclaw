@@ -43,7 +43,7 @@ const createMockMemoryManager = (): MemoryManager => {
     cleanup: vi.fn(async () => ({ expired: 0, promoted: 0, cleaned: 0 })),
     persist: vi.fn(async () => {}),
     getStatus: vi.fn(() => ({
-      shortTermCount: 0,
+      candidatePoolCount: 0,
       longTermCount: 0,
       bySession: {},
       avgImportance: 0,

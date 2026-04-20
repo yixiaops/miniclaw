@@ -59,7 +59,7 @@ export class FeishuReactions {
       }
     );
 
-    const data: FeishuApiResponse = await response.json();
+    const data = await response.json() as FeishuApiResponse;
 
     if (data.code !== 0 || !data.tenant_access_token) {
       throw new Error(`获取 token 失败: ${data.msg || `code ${data.code}`}`);
@@ -96,7 +96,7 @@ export class FeishuReactions {
         }
       );
 
-      const data: FeishuApiResponse = await response.json();
+      const data = await response.json() as FeishuApiResponse;
 
       if (data.code !== 0) {
         console.warn(`添加表情回应失败: ${data.msg || `code ${data.code}`}`);
@@ -130,7 +130,7 @@ export class FeishuReactions {
         }
       );
 
-      const data: FeishuApiResponse = await response.json();
+      const data = await response.json() as FeishuApiResponse;
 
       if (data.code !== 0) {
         console.warn(`删除表情回应失败: ${data.msg || `code ${data.code}`}`);

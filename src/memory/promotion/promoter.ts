@@ -1,13 +1,13 @@
 /**
  * @fileoverview 记忆晋升机制实现
  *
- * 实现短期记忆晋升为长期记忆的逻辑。
+ * 实现候选池记忆晋升为长期记忆的逻辑。
  *
  * @module memory/promotion/promoter
  */
 
 import type { MemoryEntry } from '../store/interface.js';
-import type { ShortTermMemory } from '../store/short-term.js';
+import type { MemoryCandidatePool } from '../store/candidate-pool.js';
 import type { LongTermMemory } from '../store/long-term.js';
 
 /**
@@ -33,11 +33,11 @@ interface PromotionStats {
 /**
  * 记忆晋升器
  *
- * 将符合条件的短期记忆晋升为长期记忆。
+ * 将符合条件的候选池记忆晋升为长期记忆。
  *
  * @example
  * ```ts
- * const promoter = new MemoryPromoter(shortTerm, longTerm);
+ * const promoter = new MemoryPromoter(candidatePool, longTerm);
  * const shouldPromote = promoter.check(entry);
  * if (shouldPromote) {
  *   await promoter.promote(id);
@@ -45,8 +45,8 @@ interface PromotionStats {
  * ```
  */
 export class MemoryPromoter {
-  /** 短期记忆 */
-  private shortTerm: ShortTermMemory;
+  /** 候选池 */
+  private candidatePool: MemoryCandidatePool;
   /** 长期记忆 */
   private longTerm: LongTermMemory;
   /** 配置 */
@@ -59,8 +59,8 @@ export class MemoryPromoter {
   /**
    * 创建晋升器
    */
-  constructor(shortTerm: ShortTermMemory, longTerm: LongTermMemory) {
-    this.shortTerm = shortTerm;
+  constructor(candidatePool: MemoryCandidatePool, longTerm: LongTermMemory) {
+    this.candidatePool = candidatePool;
     this.longTerm = longTerm;
   }
 
@@ -91,7 +91,7 @@ export class MemoryPromoter {
    */
   async promote(shortId: string): Promise<string | null> {
     // 读取短期记忆
-    const entry = await this.shortTerm.read(shortId);
+    const entry = await this.candidatePool.read(shortId);
     if (!entry) {
       return null;
     }
@@ -110,7 +110,7 @@ export class MemoryPromoter {
     });
 
     // 删除短期记忆
-    await this.shortTerm.delete(shortId);
+    await this.candidatePool.delete(shortId);
 
     this.stats.promoted++;
     return longId;
@@ -122,11 +122,11 @@ export class MemoryPromoter {
    * @returns 晋升的长期记忆 ID 列表
    */
   async promoteAll(): Promise<string[]> {
-    const stats = this.shortTerm.getStats();
+    const stats = this.candidatePool.getStats();
     const promotedIds: string[] = [];
 
     for (const sessionId of Object.keys(stats.bySession)) {
-      const memories = await this.shortTerm.list(sessionId);
+      const memories = await this.candidatePool.list(sessionId);
 
       for (const entry of memories) {
         if (this.check(entry)) {

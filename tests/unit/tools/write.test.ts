@@ -66,7 +66,7 @@ describe('MemoryWriteTool', () => {
     it('should write with metadata', async () => {
       const result = await tool.execute({
         content: 'Test content',
-        type: 'short-term',
+        type: 'candidate',
         metadata: {
           sessionId: 'session-123',
           importance: 0.8,

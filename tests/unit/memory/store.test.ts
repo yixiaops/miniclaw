@@ -25,7 +25,7 @@ describe('MemoryStore', () => {
     });
 
     it('should write with metadata', async () => {
-      const id = await store.write('Test content', 'short-term', {
+      const id = await store.write('Test content', 'candidate', {
         sessionId: 'session-123',
         importance: 0.8,
         tags: ['test']
@@ -95,7 +95,7 @@ describe('MemoryStore', () => {
 
   describe('delete', () => {
     it('should delete existing memory entry', async () => {
-      const id = await store.write('To be deleted', 'short-term');
+      const id = await store.write('To be deleted', 'candidate');
       const success = await store.delete(id);
 
       expect(success).toBe(true);
@@ -112,7 +112,7 @@ describe('MemoryStore', () => {
   describe('list', () => {
     it('should list all memory entries', async () => {
       await store.write('Memory 1', 'long-term');
-      await store.write('Memory 2', 'short-term');
+      await store.write('Memory 2', 'candidate');
       await store.write('Memory 3', 'long-term');
 
       const entries = await store.list();
@@ -121,16 +121,16 @@ describe('MemoryStore', () => {
 
     it('should filter by type', async () => {
       await store.write('Long-term 1', 'long-term');
-      await store.write('Short-term 1', 'short-term');
+      await store.write('Short-term 1', 'candidate');
       await store.write('Long-term 2', 'long-term');
 
       const longTermEntries = await store.list('long-term');
       expect(longTermEntries.length).toBe(2);
       expect(longTermEntries.every(e => e.type === 'long-term')).toBe(true);
 
-      const shortTermEntries = await store.list('short-term');
-      expect(shortTermEntries.length).toBe(1);
-      expect(shortTermEntries.every(e => e.type === 'short-term')).toBe(true);
+      const candidateEntries = await store.list('candidate');
+      expect(candidateEntries.length).toBe(1);
+      expect(candidateEntries.every(e => e.type === 'candidate')).toBe(true);
     });
 
     it('should return empty array when no entries', async () => {
@@ -143,7 +143,7 @@ describe('MemoryStore', () => {
     it('should search by keyword', async () => {
       await store.write('User prefers Python programming', 'long-term');
       await store.write('User likes Rust', 'long-term');
-      await store.write('Weather is nice today', 'short-term');
+      await store.write('Weather is nice today', 'candidate');
 
       const results = await store.search({ query: 'Python' });
       expect(results.length).toBe(1);
@@ -169,7 +169,7 @@ describe('MemoryStore', () => {
 
     it('should filter by type', async () => {
       await store.write('Python long-term', 'long-term');
-      await store.write('Python short-term', 'short-term');
+      await store.write('Python short-term', 'candidate');
 
       const longTermResults = await store.search({
         query: 'Python',

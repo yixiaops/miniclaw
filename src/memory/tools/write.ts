@@ -160,7 +160,7 @@ export class MemoryWriteTool {
       return 'type 参数不能为空';
     }
 
-    const validTypes: MemoryType[] = ['short-term', 'long-term'];
+    const validTypes: MemoryType[] = ['candidate', 'long-term'];
     if (!validTypes.includes(params.type)) {
       return `type 参数无效，必须是 ${validTypes.join(' 或 ')}`;
     }

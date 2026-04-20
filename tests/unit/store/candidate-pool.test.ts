@@ -1,51 +1,51 @@
 /**
- * @fileoverview 短期记忆管理测试
+ * @fileoverview 记忆候选池管理测试
  *
- * 测试短期记忆的核心功能。
+ * 测试记忆候选池的核心功能。
  *
- * @module tests/unit/store/short-term.test
+ * @module tests/unit/store/candidate-pool.test
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ShortTermMemory } from '../../../src/memory/store/short-term.js';
+import { MemoryCandidatePool } from '../../../src/memory/store/candidate-pool.js';
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
 
-describe('ShortTermMemory', () => {
-  let shortTerm: ShortTermMemory;
+describe('MemoryCandidatePool', () => {
+  let candidatePool: MemoryCandidatePool;
   let sessionManager: SessionManager;
 
   beforeEach(() => {
     sessionManager = new SessionManager();
-    shortTerm = new ShortTermMemory(sessionManager);
+    candidatePool = new MemoryCandidatePool(sessionManager);
   });
 
   afterEach(() => {
-    shortTerm.clear();
+    candidatePool.clear();
   });
 
   describe('write', () => {
-    it('should write short-term memory with session id', async () => {
+    it('should write candidate memory with session id', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('User context', sessionId);
+      const id = await candidatePool.write('User context', sessionId);
 
       expect(id).toBeDefined();
-      expect(id).toMatch(/^short-/);
+      expect(id).toMatch(/^candidate-/);
     });
 
     it('should store content with sessionId', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('Test content', sessionId);
+      const id = await candidatePool.write('Test content', sessionId);
 
-      const entry = await shortTerm.read(id);
+      const entry = await candidatePool.read(id);
       expect(entry?.metadata.sessionId).toBe(sessionId);
-      expect(entry?.type).toBe('short-term');
+      expect(entry?.type).toBe('candidate');
     });
 
     it('should set TTL metadata', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('Test', sessionId);
+      const id = await candidatePool.write('Test', sessionId);
 
-      const entry = await shortTerm.read(id);
+      const entry = await candidatePool.read(id);
       expect(entry?.metadata.ttl).toBeDefined();
       expect(entry?.metadata.ttl).toBeGreaterThan(0);
     });
@@ -54,14 +54,14 @@ describe('ShortTermMemory', () => {
   describe('read', () => {
     it('should read existing memory', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('Test content', sessionId);
+      const id = await candidatePool.write('Test content', sessionId);
 
-      const entry = await shortTerm.read(id);
+      const entry = await candidatePool.read(id);
       expect(entry?.content).toBe('Test content');
     });
 
     it('should return null for non-existing id', async () => {
-      const entry = await shortTerm.read('non-existing');
+      const entry = await candidatePool.read('non-existing');
       expect(entry).toBeNull();
     });
   });
@@ -71,19 +71,19 @@ describe('ShortTermMemory', () => {
       const session1 = 'session-1';
       const session2 = 'session-2';
 
-      await shortTerm.write('Memory 1', session1);
-      await shortTerm.write('Memory 2', session1);
-      await shortTerm.write('Memory 3', session2);
+      await candidatePool.write('Memory 1', session1);
+      await candidatePool.write('Memory 2', session1);
+      await candidatePool.write('Memory 3', session2);
 
-      const session1Memories = await shortTerm.list(session1);
+      const session1Memories = await candidatePool.list(session1);
       expect(session1Memories.length).toBe(2);
 
-      const session2Memories = await shortTerm.list(session2);
+      const session2Memories = await candidatePool.list(session2);
       expect(session2Memories.length).toBe(1);
     });
 
     it('should return empty array for unknown session', async () => {
-      const memories = await shortTerm.list('unknown-session');
+      const memories = await candidatePool.list('unknown-session');
       expect(memories).toEqual([]);
     });
   });
@@ -91,32 +91,32 @@ describe('ShortTermMemory', () => {
   describe('delete', () => {
     it('should delete memory', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('To delete', sessionId);
+      const id = await candidatePool.write('To delete', sessionId);
 
-      const success = await shortTerm.delete(id);
+      const success = await candidatePool.delete(id);
       expect(success).toBe(true);
 
-      const entry = await shortTerm.read(id);
+      const entry = await candidatePool.read(id);
       expect(entry).toBeNull();
     });
 
     it('should return false for non-existing id', async () => {
-      const success = await shortTerm.delete('non-existing');
+      const success = await candidatePool.delete('non-existing');
       expect(success).toBe(false);
     });
   });
 
   describe('clear', () => {
     it('should clear all memories', async () => {
-      await shortTerm.write('Memory 1', 'session-1');
-      await shortTerm.write('Memory 2', 'session-2');
+      await candidatePool.write('Memory 1', 'session-1');
+      await candidatePool.write('Memory 2', 'session-2');
 
-      shortTerm.clear();
+      candidatePool.clear();
 
-      const session1Memories = await shortTerm.list('session-1');
+      const session1Memories = await candidatePool.list('session-1');
       expect(session1Memories).toEqual([]);
 
-      const session2Memories = await shortTerm.list('session-2');
+      const session2Memories = await candidatePool.list('session-2');
       expect(session2Memories).toEqual([]);
     });
   });
@@ -124,20 +124,20 @@ describe('ShortTermMemory', () => {
   describe('TTL', () => {
     it('should check expired memories', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('Test', sessionId, { ttl: 100 }); // 100ms TTL
+      const id = await candidatePool.write('Test', sessionId, { ttl: 100 }); // 100ms TTL
 
       // 等待过期
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      const isExpired = shortTerm.isExpired(id);
+      const isExpired = candidatePool.isExpired(id);
       expect(isExpired).toBe(true);
     });
 
     it('should not expire fresh memories', async () => {
       const sessionId = 'session-123';
-      const id = await shortTerm.write('Test', sessionId);
+      const id = await candidatePool.write('Test', sessionId);
 
-      const isExpired = shortTerm.isExpired(id);
+      const isExpired = candidatePool.isExpired(id);
       expect(isExpired).toBe(false);
     });
   });

@@ -26,8 +26,9 @@ export interface FeishuEvent {
 
 export class FeishuWebSocket {
   private config: { appId: string; appSecret: string };
-  private client: FeishuClient;
-  private options: FeishuWebSocketOptions;
+  // 预留接口，暂未使用
+  private _client: FeishuClient;
+  private _options: FeishuWebSocketOptions;
 
   private wsClient: Lark.WSClient | null = null;
   private connected: boolean = false;
@@ -40,8 +41,8 @@ export class FeishuWebSocket {
     options?: FeishuWebSocketOptions
   ) {
     this.config = config;
-    this.client = client;
-    this.options = {
+    this._client = client;
+    this._options = {
       maxRetries: options?.maxRetries ?? 10,
       initialDelay: options?.initialDelay ?? 1000,
       maxDelay: options?.maxDelay ?? 30000,
@@ -101,6 +102,20 @@ export class FeishuWebSocket {
    */
   isConnected(): boolean {
     return this.connected && !this.stopped;
+  }
+
+  /**
+   * 获取客户端（预留接口）
+   */
+  getClient(): FeishuClient {
+    return this._client;
+  }
+
+  /**
+   * 获取配置选项（预留接口）
+   */
+  getOptions(): FeishuWebSocketOptions {
+    return this._options;
   }
 
   /**

@@ -1,18 +1,18 @@
 /**
- * @fileoverview 短期记忆管理实现
+ * @fileoverview 记忆候选池实现
  *
- * 实现短期记忆存储，支持 Session 隔离和 TTL 过期。
+ * 实现候选记忆存储，支持 Session 隔离和 TTL 过期。
  *
- * @module memory/store/short-term
+ * @module memory/store/candidate-pool
  */
 
 import type { MemoryEntry, MemoryMetadata } from './interface.js';
 import { SessionManager } from './session-manager.js';
 
 /**
- * 短期记忆配置
+ * 候选池配置
  */
-interface ShortTermConfig {
+interface CandidatePoolConfig {
   /** 默认 TTL（毫秒） */
   defaultTTL: number;
   /** 最大记忆数/Session */
@@ -20,34 +20,34 @@ interface ShortTermConfig {
 }
 
 /**
- * 短期记忆存储
+ * 记忆候选池存储
  *
  * 支持按 Session 隔离，自动 TTL 过期。
  *
  * @example
  * ```ts
- * const shortTerm = new ShortTermMemory(sessionManager);
- * const id = await shortTerm.write('Context', 'session-123');
+ * const candidatePool = new MemoryCandidatePool(sessionManager);
+ * const id = await candidatePool.write('Context', 'session-123');
  * ```
  */
-export class ShortTermMemory {
+export class MemoryCandidatePool {
   /** 存储映射 */
   private store: Map<string, MemoryEntry> = new Map();
   /** Session 管理器 */
   private sessionManager: SessionManager;
   /** 配置 */
-  private config: ShortTermConfig = {
+  private config: CandidatePoolConfig = {
     defaultTTL: 24 * 60 * 60 * 1000, // 24h
     maxPerSession: 100
   };
 
   /**
-   * 创建短期记忆存储
+   * 创建候选池存储
    *
    * @param sessionManager - Session 管理器
    * @param config - 配置选项（可选）
    */
-  constructor(sessionManager: SessionManager, config?: Partial<ShortTermConfig>) {
+  constructor(sessionManager: SessionManager, config?: Partial<CandidatePoolConfig>) {
     this.sessionManager = sessionManager;
     if (config?.defaultTTL) {
       this.config.defaultTTL = config.defaultTTL;
@@ -58,7 +58,7 @@ export class ShortTermMemory {
   }
 
   /**
-   * 写入短期记忆
+   * 写入候选记忆
    *
    * @param content - 内容
    * @param sessionId - Session ID
@@ -74,13 +74,13 @@ export class ShortTermMemory {
     this.sessionManager.updateActivity(sessionId);
 
     // 生成 ID
-    const id = `short-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `candidate-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date();
 
     const entry: MemoryEntry = {
       id,
       content,
-      type: 'short-term',
+      type: 'candidate',
       metadata: {
         sessionId,
         timestamp: now,
@@ -96,7 +96,7 @@ export class ShortTermMemory {
   }
 
   /**
-   * 读取短期记忆
+   * 读取候选记忆
    */
   async read(id: string): Promise<MemoryEntry | null> {
     return this.store.get(id) || null;

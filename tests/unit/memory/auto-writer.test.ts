@@ -21,7 +21,7 @@ describe('AutoMemoryWriter', () => {
       persist: vi.fn().mockResolvedValue(undefined),
       initialize: vi.fn().mockResolvedValue(undefined),
       destroy: vi.fn(),
-      getStatus: vi.fn().mockReturnValue({ shortTermCount: 0, longTermCount: 0 })
+      getStatus: vi.fn().mockReturnValue({ candidatePoolCount: 0, longTermCount: 0 })
     } as unknown as MemoryManager;
 
     writer = new AutoMemoryWriter(mockManager);
