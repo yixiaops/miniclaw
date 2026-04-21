@@ -53,10 +53,60 @@ npm run debug:web              # Web with tsx
 │          │                                                   │
 │          ▼                                                   │
 ├─────────────────────────────────────────────────────────────┤
+│   Memory System (src/memory/)                               │
+│   ImportanceEvaluator | SoulLoader | AutoWriter              │
+│   CandidatePool → TTLManager → Promoter → LongTermMemory    │
+│          │                                                   │
+│          ▼                                                   │
+├─────────────────────────────────────────────────────────────┤
 │   Tools (src/tools/)                                        │
 │   read_file | write_file | shell | web_fetch                │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Memory System Architecture (三层结构)
+
+Miniclaw 使用三层记忆架构实现智能记忆管理：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Memory System                             │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 1: MemoryCandidatePool (候选池)                      │
+│  - 临时存储对话记忆                                          │
+│  - TTL 过期机制                                              │
+│  - importance 值动态评估                                     │
+│          │                                                   │
+│          ▼ TTL 过期 + importance >= threshold               │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 2: LongTermMemory (长期记忆)                         │
+│  - 持久化重要记忆                                            │
+│  - 文件存储 (MEMORY.md + long-term.json)                    │
+│          │                                                   │
+│          ▼                                                   │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 3: SimpleMemoryStorage (Session历史)                 │
+│  - 对话上下文管理                                            │
+│  - 可选文件持久化                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Importance 评估流程：**
+
+1. LLM 在回复末尾添加 `[IMPORTANCE:X]` 标记
+2. `ImportanceEvaluator.parse()` 解析并剥离标记
+3. importance 值存储到 MemoryEntry.metadata.importance
+4. TTL 过期时，importance >= 0.5 的记忆晋升到长期记忆
+
+**核心组件：**
+
+| Component | File | Responsibility |
+|-----------|------|----------------|
+| ImportanceEvaluator | `src/memory/importance/evaluator.ts` | 解析 `[IMPORTANCE:X]` 标记 |
+| SoulLoader | `src/soul/loader.ts` | 加载 AI 人格配置，注入 importance 规则 |
+| AutoMemoryWriter | `src/memory/auto-writer.ts` | 自动写入对话记忆 |
+| TTLManager | `src/memory/store/ttl-manager.ts` | TTL 过期清理 |
+| MemoryPromoter | `src/memory/promotion/promoter.ts` | 记忆晋升决策 |
 
 ### Message Flow
 
@@ -66,7 +116,9 @@ npm run debug:web              # Web with tsx
    - `SessionManager.getOrCreate(sessionId)` → creates/retrieves session
    - `AgentRegistry.getOrCreate(sessionId)` → creates/retrieves agent instance
    - `Agent.chat(content)` → calls LLM and returns response
-3. Response returned to channel
+   - `ImportanceEvaluator.parse(response)` → extracts importance value
+   - `AutoMemoryWriter.writeConversation()` → stores memory with importance
+3. Response (with importance marker stripped) returned to channel
 
 ### Core Components
 
@@ -119,7 +171,44 @@ MINICLAW_FEISHU_APP_SECRET=...
 # Skills configuration
 MINICLAW_SKILLS_DIR=~/.miniclaw/skills  # Skills directory (default: ~/.miniclaw/skills)
 MINICLAW_SKILLS_ENABLED=true            # Enable/disable skills (default: true)
+
+# Soul configuration (AI personality + importance rules)
+MINICLAW_SOUL_FILE=~/.miniclaw/soul.md  # Soul file path (default: ~/.miniclaw/soul.md)
 ```
+
+### Soul System
+
+Soul 系统定义 AI 人格和 importance 评估规则。通过 `SoulLoader` 加载 `soul.md` 文件，注入到 Agent 的系统提示中。
+
+#### Default Soul Content
+
+如果 `soul.md` 文件不存在，使用内置的 `DEFAULT_SOUL`，包含：
+- AI 人格定义
+- `[IMPORTANCE:X]` 标记规则说明
+- 重要性评估标准（0.1-0.9）
+
+#### Soul File Format
+
+```markdown
+# Miniclaw Soul
+
+## AI 人格
+[自定义 AI 人格描述]
+
+## 核心规则
+**每次回复必须在末尾包含 [IMPORTANCE:X] 标记**
+X 为 0-1 的数值...
+
+## 其他规则
+[其他自定义规则]
+```
+
+#### Importance Evaluation
+
+LLM 在每次回复末尾输出 `[IMPORTANCE:X]` 标记：
+- `0.7-0.9`: 个人信息（姓名、偏好、联系方式）→ 晋升到长期记忆
+- `0.4-0.6`: 一般对话内容 → TTL 过期后删除
+- `0.1-0.3`: 简单问候或闲聊 → TTL 过期后删除
 
 ### Skills System
 
@@ -239,8 +328,13 @@ Path: `~/.miniclaw/config.json`
 - SimpleMemoryStorage (内存存储，可选文件持久化)
 - @mariozechner/pi-coding-agent (^0.65.2) for skill loading/formatting
 - @mariozechner/pi-agent-core (Agent框架), @mariozechner/pi-ai (AI流式处理) for tool injection optimization
+- TypeScript 5.x / Node.js 18+ + @mariozechner/pi-agent-core (^0.57.1), @mariozechner/pi-ai (^0.57.1), Express 5.x, Vitest 4.x (024-llm-importance-evaluation)
+- MemoryCandidatePool (内存候选池), LongTermMemory (长期记忆), SimpleMemoryStorage (Session历史) (024-llm-importance-evaluation)
+- ImportanceEvaluator (重要性评估), SoulLoader (人格配置), TTLManager (过期管理) (024-llm-importance-evaluation)
 
 ## Recent Changes
+- 024-llm-importance-evaluation: LLM 动态评估记忆重要性，实现智能晋升机制
+- 022-memory-optimization: Memory system optimization, three-layer architecture
 - 013-optimize-tool-injection: Implemented tool filtering with allow/deny lists, default full tool access for all agents
 - 010-pi-skill-integration: Integrated pi-coding-agent Skill API for skill loading, matching, and prompt injection
 - 002-improve-test-coverage: Added TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)

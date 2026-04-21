@@ -14,6 +14,8 @@ import type { Config } from '../config.js';
 import type { MiniclawAgent, StreamChatEvent } from '../agent/index.js';
 import type { MemoryManager } from '../../memory/manager.js';
 import { AutoMemoryWriter } from '../../memory/auto-writer.js';
+import { ImportanceEvaluator } from '../../memory/importance/index.js';
+import { SoulLoader } from '../../soul/index.js';
 
 /**
  * 消息上下文
@@ -122,6 +124,12 @@ export class MiniclawGateway {
   /** 自动记忆写入器（可选） */
   private autoWriter?: AutoMemoryWriter;
 
+  /** Importance 评估器 */
+  private importanceEvaluator: ImportanceEvaluator;
+
+  /** Soul 加载器 */
+  private soulLoader: SoulLoader;
+
   /** 配置 */
   private config: Config;
 
@@ -165,6 +173,14 @@ export class MiniclawGateway {
         enabled: config.memory?.enabled ?? false
       });
     }
+
+    // 初始化 ImportanceEvaluator
+    this.importanceEvaluator = new ImportanceEvaluator({
+      defaultImportance: config.memory?.defaultImportance ?? 0.3
+    });
+
+    // 初始化 SoulLoader
+    this.soulLoader = new SoulLoader();
   }
 
   /**
@@ -220,27 +236,34 @@ export class MiniclawGateway {
     // 4. 调用 Agent 处理消息
     const response = await agent.chat(ctx.content);
 
-    // 5. 记录消息到 Session 历史
+    // 5. 解析 importance 标记
+    const parseResult = this.importanceEvaluator.parse(response.content);
+
+    // 6. 使用剥离后的内容
+    const cleanContent = parseResult.strippedContent;
+
+    // 7. 记录消息到 Session 历史
     session.addMessage({
       role: 'user',
       content: ctx.content
     });
     session.addMessage({
       role: 'assistant',
-      content: response.content
+      content: cleanContent
     });
 
-    // 6. 保存对话历史到持久化存储
+    // 8. 保存对话历史到持久化存储
     await this.saveSessionHistory(session);
 
-    // 7. 自动写入记忆（静默降级，不阻断主流程）
+    // 9. 自动写入记忆（传入 importance）
     if (this.autoWriter) {
-      await this.autoWriter.writeConversation(sessionId, ctx.content, response.content);
+      const importance = parseResult.importance ?? this.config.memory?.defaultImportance ?? 0.3;
+      await this.autoWriter.writeConversation(sessionId, ctx.content, cleanContent, importance);
     }
 
-    // 8. 返回响应
+    // 10. 返回响应
     return {
-      content: response.content,
+      content: cleanContent,
       sessionId
     };
   }
@@ -284,14 +307,26 @@ export class MiniclawGateway {
       }
     }
 
-    // 6. 记录助手消息到 Session 历史
+    // 6. 解析 importance 标记
+    const parseResult = this.importanceEvaluator.parse(fullContent);
+
+    // 7. 使用剥离后的内容
+    const cleanContent = parseResult.strippedContent;
+
+    // 8. 记录助手消息到 Session 历史
     session.addMessage({
       role: 'assistant',
-      content: fullContent
+      content: cleanContent
     });
 
-    // 7. 保存对话历史到持久化存储
+    // 9. 保存对话历史到持久化存储
     await this.saveSessionHistory(session);
+
+    // 10. 自动写入记忆（传入 importance）
+    if (this.autoWriter) {
+      const importance = parseResult.importance ?? this.config.memory?.defaultImportance ?? 0.3;
+      await this.autoWriter.writeConversation(sessionId, ctx.content, cleanContent, importance);
+    }
   }
 
   /**
@@ -389,6 +424,24 @@ export class MiniclawGateway {
    */
   getConfig(): Config {
     return this.config;
+  }
+
+  /**
+   * 获取 Soul 加载器实例
+   *
+   * @returns SoulLoader 实例
+   */
+  getSoulLoader(): SoulLoader {
+    return this.soulLoader;
+  }
+
+  /**
+   * 获取 Importance 评估器实例
+   *
+   * @returns ImportanceEvaluator 实例
+   */
+  getImportanceEvaluator(): ImportanceEvaluator {
+    return this.importanceEvaluator;
   }
 
   /**
