@@ -23,6 +23,7 @@ npm run lint                   # ESLint check
 npm run lint:fix               # Auto-fix lint issues
 npm run format                 # Prettier format
 npm run typecheck              # TypeScript type check
+npm run precommit              # Run lint + typecheck + test (quality gate)
 
 # Run
 npm run start:cli              # CLI interactive mode
@@ -53,6 +54,11 @@ npm run debug:web              # Web with tsx
 │          │                                                   │
 │          ▼                                                   │
 ├─────────────────────────────────────────────────────────────┤
+│   Subagent System (src/core/subagent/)                      │
+│   sessions_spawn → SubagentManager → Child Agent            │
+│          │                                                   │
+│          ▼                                                   │
+├─────────────────────────────────────────────────────────────┤
 │   Memory System (src/memory/)                               │
 │   ImportanceEvaluator | SoulLoader | AutoWriter              │
 │   CandidatePool → TTLManager → Promoter → LongTermMemory    │
@@ -60,7 +66,7 @@ npm run debug:web              # Web with tsx
 │          ▼                                                   │
 ├─────────────────────────────────────────────────────────────┤
 │   Tools (src/tools/)                                        │
-│   read_file | write_file | shell | web_fetch                │
+│   read_file | write_file | shell | web_fetch | sessions_spawn│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -129,6 +135,47 @@ Miniclaw 使用三层记忆架构实现智能记忆管理：
 | SessionManager | `src/core/gateway/session.ts` | Manages session lifecycle |
 | AgentRegistry | `src/core/agent/registry.ts` | Manages agent instances per session |
 | MiniclawAgent | `src/core/agent/index.ts` | LLM interaction, tool calling |
+| SubagentManager | `src/core/subagent/manager.ts` | Spawns and manages child agents |
+| PromptManager | `src/core/prompt/manager.ts` | Loads YAML frontmatter prompts |
+
+### Project Structure
+
+```
+src/
+├── channels/          # Input/output channels (CLI, API, Web, Feishu)
+├── core/
+│   ├── agent/         # Agent core + registry
+│   ├── gateway/       # Gateway + Router + SessionManager
+│   ├── memory/        # Session history (SimpleMemoryStorage)
+│   ├── prompt/        # YAML frontmatter prompt loader
+│   ├── session-key/   # Session key builder/parser
+│   ├── skill/         # Skill matching (pi-coding-agent)
+│   └── subagent/      # Child agent spawning
+├── memory/            # Three-layer memory system
+│   ├── importance/    # LLM importance evaluation
+│   ├── promotion/     # Memory promotion logic
+│   ├── store/         # CandidatePool, TTLManager, LongTerm
+│   └── write/         # Deduplication, sensitive detection
+├── soul/              # AI personality + importance rules
+├── tools/             # Built-in tools + tool filtering
+└── index.ts           # Entry point
+```
+
+### Subagent System (sessions_spawn)
+
+Miniclaw supports dynamic child agent spawning for specialized tasks:
+
+1. **Agent calls `sessions_spawn`** with `{ task, agentId }` params
+2. **SubagentManager** checks permissions (`subagents.allowAgents` in config)
+3. **Creates isolated Session** with key `subagent:{agentId}:{uuid}`
+4. **Spawns specialized Agent** with its own tools, prompts, skills
+5. **Returns result** to parent agent, auto-cleanup
+
+Key mechanisms:
+- **Permission control**: `AgentRegistry.canSpawnSubagent(parent, child)`
+- **Concurrency limit**: `maxConcurrent` (default 5)
+- **Tool isolation**: Child agent's tools from its own config, not inherited
+- **Multi-level nesting**: Child can spawn further children
 
 ## Key Conventions
 
@@ -259,6 +306,44 @@ EOF
 # Trigger: "help me commit" → matches git-helper skill
 ```
 
+### Prompt Configuration
+
+Agent system prompts use YAML frontmatter format for metadata:
+
+```markdown
+---
+name: etf
+description: ETF market analyst
+model: qwen-plus
+tools:
+  - web_search
+  - web_fetch
+---
+
+You are an ETF market analyst, specializing in fund selection...
+```
+
+**Metadata fields:**
+
+| Field | Purpose |
+|-------|---------|
+| `name` | Prompt identifier |
+| `description` | Prompt description |
+| `model` | Recommended model |
+| `tools` | Recommended tool list |
+
+**Reference in config:**
+
+```json
+{
+  "agents": {
+    "list": [
+      { "id": "etf", "systemPrompt": "file://~/.miniclaw/prompts/etf.md" }
+    ]
+  }
+}
+```
+
 ### Tool Configuration
 
 Each Agent can be configured with a specific set of tools via `tools.allow` and `tools.deny` in the config file.
@@ -324,17 +409,14 @@ Path: `~/.miniclaw/config.json`
 - Chinese comments used throughout for documentation
 
 ## Active Technologies
-- TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)
-- SimpleMemoryStorage (内存存储，可选文件持久化)
-- @mariozechner/pi-coding-agent (^0.65.2) for skill loading/formatting
-- @mariozechner/pi-agent-core (Agent框架), @mariozechner/pi-ai (AI流式处理) for tool injection optimization
-- TypeScript 5.x / Node.js 18+ + @mariozechner/pi-agent-core (^0.57.1), @mariozechner/pi-ai (^0.57.1), Express 5.x, Vitest 4.x (024-llm-importance-evaluation)
-- MemoryCandidatePool (内存候选池), LongTermMemory (长期记忆), SimpleMemoryStorage (Session历史) (024-llm-importance-evaluation)
-- ImportanceEvaluator (重要性评估), SoulLoader (人格配置), TTLManager (过期管理) (024-llm-importance-evaluation)
+- TypeScript 5.x / Node.js 18+
+- Vitest (testing), Express 5.x, Socket.IO
+- @mariozechner/pi-agent-core (Agent framework), @mariozechner/pi-ai (streaming)
+- @mariozechner/pi-coding-agent (skill loading/formatting)
+- @larksuiteoapi/node-sdk (Feishu integration)
 
 ## Recent Changes
-- 024-llm-importance-evaluation: LLM 动态评估记忆重要性，实现智能晋升机制
-- 022-memory-optimization: Memory system optimization, three-layer architecture
-- 013-optimize-tool-injection: Implemented tool filtering with allow/deny lists, default full tool access for all agents
-- 010-pi-skill-integration: Integrated pi-coding-agent Skill API for skill loading, matching, and prompt injection
-- 002-improve-test-coverage: Added TypeScript 5.x / Node.js 18+ + Vitest (测试框架), pi-agent-core (Agent框架)
+- 024-llm-importance-evaluation: LLM dynamically evaluates message importance
+- 022-memory-optimization: Three-layer memory architecture
+- 013-optimize-tool-injection: Tool filtering with allow/deny lists
+- 010-pi-skill-integration: Skill API for progressive disclosure

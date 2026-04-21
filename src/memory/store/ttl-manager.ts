@@ -14,7 +14,7 @@ import type { SessionCompressor } from '../session/compressor.js';
 /**
  * 清理统计
  */
-interface CleanupResult {
+export interface CleanupResult {
   /** 过期数量 */
   expired: number;
   /** 晋升数量 */
@@ -77,6 +77,8 @@ export class TTLManager {
   private timer?: ReturnType<typeof setInterval>;
   /** 压缩定时器 */
   private compressionTimer?: ReturnType<typeof setInterval>;
+  /** 清理后回调（用于持久化） */
+  private onCleanupCallback?: (result: CleanupResult) => Promise<void>;
   /** 默认 TTL */
   private defaultTTL: number = 24 * 60 * 60 * 1000; // 24h
   /** 默认压缩间隔 */
@@ -121,8 +123,10 @@ export class TTLManager {
    */
   async cleanup(): Promise<CleanupResult> {
     this.stats.cleanups++;
+    console.log('[TTLManager] 执行清理...');
 
     const expiredEntries = this.candidatePool.getExpiredEntries();
+    console.log(`[TTLManager] 过期条目数: ${expiredEntries.length}`);
     const result: CleanupResult = { expired: 0, promoted: 0, cleaned: 0 };
 
     for (const entry of expiredEntries) {
@@ -131,7 +135,9 @@ export class TTLManager {
 
       // 检查是否需要晋升
       if (this.promoter.check(entry)) {
+        console.log(`[TTLManager] 检查晋升: id=${entry.id.slice(0, 20)}, importance=${entry.metadata.importance}`);
         const promoted = await this.promoter.promote(entry.id);
+        console.log(`[TTLManager] 晋升结果: ${promoted ? '成功' : '失败'}`);
         if (promoted) {
           this.stats.totalPromoted++;
           result.promoted++;
@@ -145,7 +151,20 @@ export class TTLManager {
       result.cleaned++;
     }
 
+    // 调用清理后回调（用于持久化）
+    if (this.onCleanupCallback && result.promoted > 0) {
+      console.log(`[TTLManager] 调用 onCleanupCallback, promoted=${result.promoted}`);
+      await this.onCleanupCallback(result);
+    }
+
     return result;
+  }
+
+  /**
+   * 设置清理后回调
+   */
+  setOnCleanup(callback: (result: CleanupResult) => Promise<void>): void {
+    this.onCleanupCallback = callback;
   }
 
   /**
