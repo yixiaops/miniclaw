@@ -75,6 +75,7 @@ export class MemoryPromoter {
 
     const importance = entry.metadata.importance || 0;
     const shouldPromote = importance >= this.config.importanceThreshold;
+    console.log(`[MemoryPromoter] check: importance=${importance}, threshold=${this.config.importanceThreshold}, shouldPromote=${shouldPromote}`);
 
     if (!shouldPromote) {
       this.stats.skipped++;

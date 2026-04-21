@@ -9,7 +9,7 @@
 import { MemoryCandidatePool } from './store/candidate-pool.js';
 import { LongTermMemory } from './store/long-term.js';
 import { SessionManager } from './store/session-manager.js';
-import { TTLManager } from './store/ttl-manager.js';
+import { TTLManager, type CleanupResult } from './store/ttl-manager.js';
 import { MemoryPromoter } from './promotion/promoter.js';
 import { MemorySearchTool } from './tools/search.js';
 import { EmbeddingService } from './embedding/index.js';
@@ -45,26 +45,11 @@ export interface MemoryStatus {
   ttlRunning: boolean;
 }
 
-/**
- * 清理结果
- */
-export interface CleanupResult {
-  /** 过期数量 */
-  expired: number;
-  /** 晋升数量 */
-  promoted: number;
-  /** 清理数量 */
-  cleaned: number;
-}
+// Re-export CleanupResult from TTLManager
+export type { CleanupResult } from './store/ttl-manager.js';
 
 /**
  * MemoryManager 类
- *
- * 统一管理双层记忆系统的入口。
- *
- * @example
- * ```ts
- * const manager = new MemoryManager({
  *   storageDir: '~/.miniclaw',
  *   defaultTTL: 24 * 60 * 60 * 1000
  * });
@@ -107,6 +92,14 @@ export class MemoryManager {
     if (config.defaultTTL) {
       this.ttlManager.setDefaultTTL(config.defaultTTL);
     }
+    // 设置清理后回调（自动持久化）
+    this.ttlManager.setOnCleanup(async (result) => {
+      console.log(`[MemoryManager] TTL清理回调: promoted=${result.promoted}`);
+      if (result.promoted > 0) {
+        await this.persist();
+        console.log('[MemoryManager] 持久化完成');
+      }
+    });
 
     this.searchTool = new MemorySearchTool(
       this.candidatePool,
@@ -228,7 +221,12 @@ export class MemoryManager {
    */
   async cleanup(): Promise<CleanupResult> {
     try {
-      return await this.ttlManager.cleanup();
+      const result = await this.ttlManager.cleanup();
+      // 如果有晋升，自动持久化
+      if (result.promoted > 0) {
+        await this.persist();
+      }
+      return result;
     } catch (error) {
       console.error('[MemoryManager] Cleanup failed:', error);
       return { expired: 0, promoted: 0, cleaned: 0 };

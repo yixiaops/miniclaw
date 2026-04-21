@@ -238,6 +238,7 @@ export class MiniclawGateway {
 
     // 5. 解析 importance 标记
     const parseResult = this.importanceEvaluator.parse(response.content);
+    console.log(`[Gateway] IMPORTANCE 解析: ${parseResult.importance}, 原始内容包含标记: ${response.content.includes('[IMPORTANCE:')}`);
 
     // 6. 使用剥离后的内容
     const cleanContent = parseResult.strippedContent;
@@ -258,6 +259,7 @@ export class MiniclawGateway {
     // 9. 自动写入记忆（传入 importance）
     if (this.autoWriter) {
       const importance = parseResult.importance ?? this.config.memory?.defaultImportance ?? 0.3;
+      console.log(`[Gateway] 写入记忆: sessionId=${sessionId}, importance=${importance}`);
       await this.autoWriter.writeConversation(sessionId, ctx.content, cleanContent, importance);
     }
 
