@@ -4,6 +4,7 @@
  */
 import 'dotenv/config';
 import path from 'path';
+import { homedir } from 'os';
 import { MiniclawAgent, DEFAULT_SYSTEM_PROMPT } from './core/agent/index.js';
 import type { PromptComponent } from './core/agent/types.js';
 import { AgentRegistry } from './core/agent/registry.js';
@@ -18,6 +19,7 @@ import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
 import { getBuiltinTools, filterToolsByPolicy } from './tools/index.js';
+import { SoulLoader } from './soul/index.js';
 
 /**
  * Shutdown handler 配置
@@ -75,13 +77,15 @@ export function setupShutdownHandler(config: ShutdownHandlerConfig): () => Promi
  * @param promptManager - 提示词管理器
  * @param preloadedPrompts - 预加载的提示词映射
  * @param skillManager - 技能管理器（可选）
+ * @param soulContent - Soul 内容（可选）
  */
 function createAgentFactory(
   _registry: AgentRegistry,
   subagentManager: SubagentManager,
   _promptManager: PromptManager,
   preloadedPrompts: Map<string, string>,
-  skillManager?: PiSkillManager
+  skillManager?: PiSkillManager,
+  soulContent?: string
 ) {
   return (
     sessionKey: string,
@@ -93,27 +97,42 @@ function createAgentFactory(
     console.log(`[Gateway] 创建新 Agent: ${sessionKey} (type: ${agentId}, isSubagent: ${isSubagent || false})`);
 
     // 使用预加载的提示词（如果存在）
-    const systemPrompt = preloadedPrompts.get(agentId);
-    if (systemPrompt) {
+    let systemPrompt = preloadedPrompts.get(agentId) || DEFAULT_SYSTEM_PROMPT;
+    if (preloadedPrompts.get(agentId)) {
       console.log(`[Gateway] 使用预加载的提示词: chars=${systemPrompt.length}`);
+    }
+
+    // 注入 Soul 内容到 system prompt
+    if (soulContent) {
+      systemPrompt = `${systemPrompt}\n\n${soulContent}`;
+      console.log(`[Gateway] 已注入 Soul 内容: chars=${soulContent.length}`);
     }
 
     // 构建提示词组成部分
     const promptComponents: PromptComponent[] = [];
 
     // 1. 提示词文件（如果有自定义提示词）
-    if (systemPrompt && agentConfig?.systemPrompt) {
+    if (preloadedPrompts.get(agentId) && agentConfig?.systemPrompt) {
       promptComponents.push({
         type: 'file',
         label: `提示词文件 ${path.basename(agentConfig.systemPrompt)}`,
-        content: systemPrompt,
+        content: preloadedPrompts.get(agentId) || '',
         meta: {
           fileName: path.basename(agentConfig.systemPrompt)
         }
       });
     }
 
-    // 2. 技能数据（如果有技能）
+    // 2. Soul 内容（如果有）
+    if (soulContent) {
+      promptComponents.push({
+        type: 'soul',
+        label: 'Soul 内容',
+        content: soulContent
+      });
+    }
+
+    // 3. 技能数据（如果有技能）
     if (skillManager && skillManager.count() > 0) {
       const skillPrompts = skillManager.getAllPrompts();
       if (skillPrompts) {
@@ -129,8 +148,8 @@ function createAgentFactory(
       }
     }
 
-    // 3. 默认提示词（如果没有自定义提示词文件）
-    if (!systemPrompt && !agentConfig?.systemPrompt) {
+    // 4. 默认提示词（如果没有自定义提示词文件）
+    if (!preloadedPrompts.get(agentId) && !agentConfig?.systemPrompt) {
       promptComponents.push({
         type: 'default',
         label: '默认提示词',
@@ -245,15 +264,28 @@ async function main() {
   let memoryManager: MemoryManager | undefined;
   if (config.memory?.enabled) {
     console.log('\n初始化 MemoryManager...');
+
+    // 展开路径中的 ~
+    let storageDir = config.memory.dir || './memory-storage';
+    if (storageDir.startsWith('~')) {
+      storageDir = path.join(homedir(), storageDir.slice(2));
+    }
+
     memoryManager = new MemoryManager({
-      storageDir: config.memory.dir || './memory-storage',
+      storageDir,
       defaultTTL: config.memory.defaultTTL || 86400000,
       cleanupInterval: config.memory.cleanupInterval || 3600000,
       promotionThreshold: config.memory.promotionThreshold || 0.5
     });
     await memoryManager.initialize();
-    console.log('✓ MemoryManager 已初始化');
+    console.log(`✓ MemoryManager 已初始化 (storageDir: ${storageDir})`);
   }
+
+  // 初始化 SoulLoader
+  console.log('\n初始化 SoulLoader...');
+  const soulLoader = new SoulLoader();
+  const soulContent = await soulLoader.load();
+  console.log(`✓ SoulLoader 已初始化 (chars: ${soulContent.length})`);
 
   // 创建 AgentRegistry
   const registry = new AgentRegistry(config, () => {
@@ -302,8 +334,8 @@ async function main() {
     }
   }
 
-  // 创建 Agent 工厂函数
-  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, skillManager);
+  // 创建 Agent 工厂函数（传入 soul 内容）
+  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, skillManager, soulContent);
 
   // 更新 Registry 的创建函数（使用任意键设置私有属性）
   (registry as any).createAgentFn = createAgentFn;

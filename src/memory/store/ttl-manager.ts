@@ -281,7 +281,7 @@ export class TTLManager {
     const activeSessions = this.sessionManager.listActive();
     let compressed = 0;
 
-    for (const sessionInfo of activeSessions) {
+    for (const _sessionInfo of activeSessions) {
       // 目前 SessionCompressor 压缩的是 Session 对象（含 messages）
       // 而 SessionManager 跟踪的是 SessionInfo（元数据）
       // 这里简化处理：只统计活跃 Session 数量

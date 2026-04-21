@@ -17,6 +17,8 @@ export interface AutoWriterConfig {
   enabled?: boolean;
   /** 默认重要性分数，默认 0.3 */
   defaultImportance?: number;
+  /** 是否使用动态 importance（接收外部传入值），默认 true */
+  useDynamicImportance?: boolean;
 }
 
 /**
@@ -46,7 +48,8 @@ export class AutoMemoryWriter {
     this.memoryManager = memoryManager;
     this.config = {
       enabled: config.enabled ?? true,
-      defaultImportance: config.defaultImportance ?? 0.3
+      defaultImportance: config.defaultImportance ?? 0.3,
+      useDynamicImportance: config.useDynamicImportance ?? true
     };
     this.errorHandler = new MemoryErrorHandler({ logErrors: true });
   }
@@ -57,25 +60,31 @@ export class AutoMemoryWriter {
    * @param sessionId - Session ID
    * @param userMsg - 用户消息
    * @param assistantMsg - 助手消息
+   * @param importance - 可选的重要性值（0-1），不传则使用默认值
    * @returns 写入结果（成功返回 true，失败返回 false）
    */
   async writeConversation(
     sessionId: string,
     userMsg: string,
-    assistantMsg: string
+    assistantMsg: string,
+    importance?: number
   ): Promise<boolean> {
     if (!this.config.enabled) {
       return false;
     }
 
-    // 使用 silentExecute 并行写入两条消息
-    const importance = this.config.defaultImportance;
+    // 使用传入的 importance 或默认值
+    const finalImportance =
+      this.config.useDynamicImportance && importance !== undefined
+        ? importance
+        : this.config.defaultImportance;
 
+    // 使用 silentExecute 并行写入两条消息
     const results = await Promise.all([
       this.errorHandler.silentExecute(
         async () => {
           await this.memoryManager.write(userMsg, sessionId, {
-            importance,
+            importance: finalImportance,
             source: 'user'
           });
           return true;
@@ -85,7 +94,7 @@ export class AutoMemoryWriter {
       this.errorHandler.silentExecute(
         async () => {
           await this.memoryManager.write(assistantMsg, sessionId, {
-            importance,
+            importance: finalImportance,
             source: 'assistant'
           });
           return true;
@@ -103,20 +112,27 @@ export class AutoMemoryWriter {
    *
    * @param sessionId - Session ID
    * @param userMsg - 用户消息
+   * @param importance - 可选的重要性值（0-1），不传则使用默认值
    * @returns 是否写入成功
    */
   async writeUserMessage(
     sessionId: string,
-    userMsg: string
+    userMsg: string,
+    importance?: number
   ): Promise<boolean> {
     if (!this.config.enabled) {
       return false;
     }
 
+    const finalImportance =
+      this.config.useDynamicImportance && importance !== undefined
+        ? importance
+        : this.config.defaultImportance;
+
     return await this.errorHandler.silentExecute(
       async () => {
         await this.memoryManager.write(userMsg, sessionId, {
-          importance: this.config.defaultImportance,
+          importance: finalImportance,
           source: 'user'
         });
         return true;
@@ -130,20 +146,27 @@ export class AutoMemoryWriter {
    *
    * @param sessionId - Session ID
    * @param assistantMsg - 助手消息
+   * @param importance - 可选的重要性值（0-1），不传则使用默认值
    * @returns 是否写入成功
    */
   async writeAssistantMessage(
     sessionId: string,
-    assistantMsg: string
+    assistantMsg: string,
+    importance?: number
   ): Promise<boolean> {
     if (!this.config.enabled) {
       return false;
     }
 
+    const finalImportance =
+      this.config.useDynamicImportance && importance !== undefined
+        ? importance
+        : this.config.defaultImportance;
+
     return await this.errorHandler.silentExecute(
       async () => {
         await this.memoryManager.write(assistantMsg, sessionId, {
-          importance: this.config.defaultImportance,
+          importance: finalImportance,
           source: 'assistant'
         });
         return true;

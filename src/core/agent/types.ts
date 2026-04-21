@@ -14,6 +14,7 @@
  * @property type - 来源类型
  *   - 'file': 来自提示词文件
  *   - 'skills': 来自技能元数据
+ *   - 'soul': 来自 soul.md 文件
  *   - 'default': 默认提示词
  *   - 'tools': 工具元数据（预留）
  * @property label - 来源标识（文件名、技能数量等）
@@ -22,7 +23,7 @@
  */
 export interface PromptComponent {
   /** 来源类型 */
-  type: 'file' | 'skills' | 'default' | 'tools';
+  type: 'file' | 'skills' | 'soul' | 'default' | 'tools';
   /** 来源标识（文件名、技能数量等） */
   label: string;
   /** 内容 */
