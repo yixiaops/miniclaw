@@ -4,6 +4,7 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 工具参数 schema
@@ -42,7 +43,9 @@ export const editTool = {
     params: EditParams,
     _signal?: AbortSignal
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: EditDetails }> {
-    const { path, old_string, new_string, replace_all = false } = params;
+    const { old_string, new_string, replace_all = false } = params;
+    const rawPath = params.path;
+    const path = normalizePath(rawPath);
 
     try {
       // 读取文件内容
@@ -52,7 +55,7 @@ export const editTool = {
       if (!content.includes(old_string)) {
         return {
           content: [{ type: 'text', text: `未找到要替换的文本: ${old_string.substring(0, 100)}...` }],
-          details: { path, replacements: 0 }
+          details: { path: rawPath, replacements: 0 }
         };
       }
 
@@ -65,7 +68,7 @@ export const editTool = {
               type: 'text',
               text: `找到 ${matches} 处匹配，old_string 必须唯一匹配。请使用更具体的文本，或使用 replace_all=true。`
             }],
-            details: { path, replacements: 0 }
+            details: { path: rawPath, replacements: 0 }
           };
         }
       }
@@ -93,13 +96,13 @@ export const editTool = {
           type: 'text',
           text: `已替换 ${replacementCount} 处匹配:\n旧文本: ${old_string.substring(0, 100)}${old_string.length > 100 ? '...' : ''}\n新文本: ${new_string.substring(0, 100)}${new_string.length > 100 ? '...' : ''}`
         }],
-        details: { path, replacements: replacementCount }
+        details: { path: rawPath, replacements: replacementCount }
       };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         content: [{ type: 'text', text: `文件编辑失败: ${errorMsg}` }],
-        details: { path, replacements: 0 }
+        details: { path: rawPath, replacements: 0 }
       };
     }
   }

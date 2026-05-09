@@ -5,6 +5,7 @@
 import { readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 工具参数 schema
@@ -76,7 +77,8 @@ export const lsTool = {
     params: LSParams,
     _signal?: AbortSignal
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: LSDetails }> {
-    const { path, ignore = ['node_modules', '.git', 'dist'] } = params;
+    const { path: rawPath, ignore = ['node_modules', '.git', 'dist'] } = params;
+    const path = normalizePath(rawPath);
 
     try {
       // 读取目录内容

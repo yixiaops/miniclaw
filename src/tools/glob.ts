@@ -5,6 +5,7 @@
 import fg from 'fast-glob';
 import { statSync } from 'fs';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 工具参数 schema
@@ -42,7 +43,8 @@ export const globTool = {
     params: GlobParams,
     _signal?: AbortSignal
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: GlobDetails }> {
-    const { pattern, path } = params;
+    const { pattern, path: rawPath } = params;
+    const path = rawPath ? normalizePath(rawPath) : undefined;
 
     try {
       // 执行 glob 搜索

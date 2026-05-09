@@ -4,6 +4,7 @@
  */
 import { readFileSync, existsSync } from 'fs';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 工具参数 schema
@@ -38,13 +39,14 @@ export const readFileTool = {
     params: ReadFileParams,
     _signal?: AbortSignal
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: ReadFileDetails }> {
-    const { path } = params;
+    const rawPath = params.path;
+    const path = normalizePath(rawPath);
 
     // 检查文件是否存在
     if (!existsSync(path)) {
       return {
-        content: [{ type: 'text', text: `文件不存在: ${path}` }],
-        details: { path }
+        content: [{ type: 'text', text: `文件不存在: ${rawPath}` }],
+        details: { path: rawPath }
       };
     }
 
@@ -53,13 +55,13 @@ export const readFileTool = {
       const fileContent = readFileSync(path, 'utf-8');
       return {
         content: [{ type: 'text', text: fileContent }],
-        details: { path }
+        details: { path: rawPath }
       };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         content: [{ type: 'text', text: `读取文件失败: ${errorMsg}` }],
-        details: { path }
+        details: { path: rawPath }
       };
     }
   }
