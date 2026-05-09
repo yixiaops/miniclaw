@@ -4,6 +4,7 @@
  */
 import { execSync } from 'child_process';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 工具参数 schema
@@ -83,7 +84,8 @@ export const grepTool = {
       if (glob) args.push('-g', glob);
 
       // 搜索路径
-      const searchPath = path || process.cwd();
+      const rawPath = path || process.cwd();
+      const searchPath = path ? normalizePath(rawPath) : rawPath;
 
       // 构建命令
       const command = `rg ${args.join(' ')} "${pattern.replace(/"/g, '\\"')}" "${searchPath}"`;

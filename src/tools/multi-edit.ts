@@ -4,6 +4,7 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 单个编辑操作
@@ -50,12 +51,14 @@ export const multiEditTool = {
     params: MultiEditParams,
     _signal?: AbortSignal
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: MultiEditDetails }> {
-    const { path, edits } = params;
+    const { edits } = params;
+    const rawPath = params.path;
+    const path = normalizePath(rawPath);
 
     if (edits.length === 0) {
       return {
         content: [{ type: 'text', text: '编辑操作列表为空' }],
-        details: { path, totalReplacements: 0, editCount: 0 }
+        details: { path: rawPath, totalReplacements: 0, editCount: 0 }
       };
     }
 
@@ -79,7 +82,7 @@ export const multiEditTool = {
               type: 'text',
               text: `编辑 #${i + 1} 失败: 未找到要替换的文本 "${old_string.substring(0, 50)}..."，已恢复原始文件内容。`
             }],
-            details: { path, totalReplacements: 0, editCount: i }
+            details: { path: rawPath, totalReplacements: 0, editCount: i }
           };
         }
 
@@ -94,7 +97,7 @@ export const multiEditTool = {
                 type: 'text',
                 text: `编辑 #${i + 1} 失败: 找到 ${matches} 处匹配，old_string 必须唯一匹配。已恢复原始文件内容。`
               }],
-              details: { path, totalReplacements: 0, editCount: i }
+              details: { path: rawPath, totalReplacements: 0, editCount: i }
             };
           }
         }
@@ -122,7 +125,7 @@ export const multiEditTool = {
           text: `批量编辑完成:\n${results.join('\n')}\n共替换 ${totalReplacements} 处`
         }],
         details: {
-          path,
+          path: rawPath,
           totalReplacements,
           editCount: edits.length
         }
@@ -131,7 +134,7 @@ export const multiEditTool = {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         content: [{ type: 'text', text: `批量编辑失败: ${errorMsg}` }],
-        details: { path, totalReplacements: 0, editCount: 0 }
+        details: { path: rawPath, totalReplacements: 0, editCount: 0 }
       };
     }
   }

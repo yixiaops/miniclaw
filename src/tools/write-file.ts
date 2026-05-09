@@ -5,6 +5,7 @@
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { Type, type Static } from '@sinclair/typebox';
+import { normalizePath } from '../utils/path.js';
 
 /**
  * 工具参数 schema
@@ -47,7 +48,9 @@ export const writeFileTool = {
     params: WriteFileParams,
     _signal?: AbortSignal
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details: WriteFileDetails }> {
-    const { path, content, mode = 'overwrite' } = params;
+    const { content, mode = 'overwrite' } = params;
+    const rawPath = params.path;
+    const path = normalizePath(rawPath);
 
     try {
       // 确保目录存在
@@ -62,8 +65,8 @@ export const writeFileTool = {
           // 覆盖写入（默认模式）
           writeFileSync(path, content, 'utf-8');
           return {
-            content: [{ type: 'text', text: `文件已覆盖写入: ${path} (${content.length} 字符)` }],
-            details: { path, mode, created: !fileExists }
+            content: [{ type: 'text', text: `文件已覆盖写入: ${rawPath} (${content.length} 字符)` }],
+            details: { path: rawPath, mode, created: !fileExists }
           };
 
         case 'append':
@@ -71,15 +74,15 @@ export const writeFileTool = {
           if (fileExists) {
             appendFileSync(path, content, 'utf-8');
             return {
-              content: [{ type: 'text', text: `内容已追加到文件: ${path}` }],
-              details: { path, mode, created: false }
+              content: [{ type: 'text', text: `内容已追加到文件: ${rawPath}` }],
+              details: { path: rawPath, mode, created: false }
             };
           } else {
             // 文件不存在，创建新文件
             writeFileSync(path, content, 'utf-8');
             return {
-              content: [{ type: 'text', text: `文件已创建并写入: ${path}` }],
-              details: { path, mode, created: true }
+              content: [{ type: 'text', text: `文件已创建并写入: ${rawPath}` }],
+              details: { path: rawPath, mode, created: true }
             };
           }
 
@@ -87,14 +90,14 @@ export const writeFileTool = {
           // 仅创建新文件
           if (fileExists) {
             return {
-              content: [{ type: 'text', text: `文件已存在，未覆盖: ${path}` }],
-              details: { path, mode, created: false }
+              content: [{ type: 'text', text: `文件已存在，未覆盖: ${rawPath}` }],
+              details: { path: rawPath, mode, created: false }
             };
           } else {
             writeFileSync(path, content, 'utf-8');
             return {
-              content: [{ type: 'text', text: `文件已创建: ${path}` }],
-              details: { path, mode, created: true }
+              content: [{ type: 'text', text: `文件已创建: ${rawPath}` }],
+              details: { path: rawPath, mode, created: true }
             };
           }
       }
@@ -102,7 +105,7 @@ export const writeFileTool = {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         content: [{ type: 'text', text: `写入文件失败: ${errorMsg}` }],
-        details: { path, mode, created: false }
+        details: { path: rawPath, mode, created: false }
       };
     }
   }
