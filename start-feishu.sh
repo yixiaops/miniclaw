@@ -9,5 +9,5 @@ if [ -n "$EXISTING" ]; then
     exit 0
 fi
 
-# 启动飞书渠道
-node dist/index.js feishu
+# 清除代理变量，飞书直连
+env -u https_proxy -u http_proxy -u all_proxy node dist/index.js feishu

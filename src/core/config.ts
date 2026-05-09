@@ -181,6 +181,16 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
 };
 
 /**
+ * 异常通知配置
+ */
+export interface ExceptionNotificationConfig {
+  /** 是否启用通知 */
+  enabled: boolean;
+  /** 飞书通知目标 */
+  feishuTarget?: string;
+}
+
+/**
  * 应用配置
  */
 export interface Config {
@@ -196,6 +206,8 @@ export interface Config {
   skills?: SkillsConfig;
   /** 记忆系统配置（可选） */
   memory?: MemoryConfig;
+  /** 异常通知配置（可选） */
+  exceptionNotification?: ExceptionNotificationConfig;
 }
 
 /**
@@ -209,6 +221,9 @@ const DEFAULT_CONFIG: Omit<Config, 'bailian'> & { bailian: Omit<BailianConfig, '
   server: {
     port: 3000,
     host: '0.0.0.0'
+  },
+  exceptionNotification: {
+    enabled: false
   }
 };
 

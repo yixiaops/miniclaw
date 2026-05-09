@@ -20,6 +20,7 @@ import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
 import { getBuiltinTools, filterToolsByPolicy } from './tools/index.js';
 import { SoulLoader } from './soul/index.js';
+import { setupGlobalExceptionHandler } from './core/exception-handler.js';
 
 /**
  * Shutdown handler 配置
@@ -229,6 +230,11 @@ async function main() {
   const config = loadConfig();
   console.log(`模型: ${config.bailian.model}`);
   console.log(`API: ${config.bailian.baseUrl}`);
+
+  // 设置全局异常处理器（进程稳定性）
+  setupGlobalExceptionHandler({
+    exceptionNotification: config.exceptionNotification || { enabled: false }
+  });
 
   // 初始化 PiSkillManager
   let skillManager: PiSkillManager | undefined;
