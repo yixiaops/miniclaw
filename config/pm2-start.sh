@@ -2,6 +2,9 @@
 # PM2 启动脚本 for miniclaw
 # 首次运行需要: pm2 install pm2-logrotate
 
+# 清除代理环境变量，防止飞书 API 请求走代理导致 400
+unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY all_proxy ALL_PROXY
+
 echo "启动 miniclaw..."
 pm2 start config/ecosystem.config.cjs
 
