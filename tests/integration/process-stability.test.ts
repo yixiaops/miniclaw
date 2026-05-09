@@ -27,7 +27,7 @@ describe('Process Stability', () => {
     }
 
     exceptionLogFile = join(testLogsDir, 'exception.log');
-    ecosystemConfigFile = join(configDir, 'ecosystem.config.js');
+    ecosystemConfigFile = join(configDir, 'ecosystem.config.cjs');
     pm2StartScript = join(configDir, 'pm2-start.sh');
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
