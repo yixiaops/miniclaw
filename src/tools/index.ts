@@ -15,6 +15,12 @@ import { lsTool } from './ls.js';
 import { editTool } from './edit.js';
 import { multiEditTool } from './multi-edit.js';
 
+// 导出 Scheduler 工具工厂函数
+export { createSchedulerCreateTool, type SchedulerCreateTool, type SchedulerCreateDetails } from './scheduler-create.js';
+export { createSchedulerListTool, type SchedulerListTool } from './scheduler-list.js';
+export { createSchedulerDeleteTool, type SchedulerDeleteTool } from './scheduler-delete.js';
+export { createSchedulerUpdateTool, type SchedulerUpdateTool } from './scheduler-update.js';
+
 // 导出工具过滤功能
 export {
   filterToolsByPolicy,

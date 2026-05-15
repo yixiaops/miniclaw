@@ -1,0 +1,19 @@
+{
+  "tasks": [
+    {
+      "taskId": "recurring-1",
+      "userId": "test-user",
+      "channel": "cli",
+      "content": "测试任务内容",
+      "summary": "测试",
+      "executeTime": "0 9 * * 1",
+      "taskType": "recurring",
+      "actionType": "reminder",
+      "status": "pending",
+      "createdAt": "2026-05-15T10:00:00Z",
+      "retryCount": 0,
+      "lastExecuteTime": "2026-05-15T10:02:28.891Z",
+      "updatedAt": "2026-05-15T10:02:28.891Z"
+    }
+  ]
+}

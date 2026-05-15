@@ -36,6 +36,9 @@ npm run start:all              # All channels
 npm run debug:cli              # CLI with tsx
 npm run debug:api              # API with tsx
 npm run debug:web              # Web with tsx
+
+# Deployment
+./start-feishu.sh              # Production Feishu (single instance, clears proxy vars)
 ```
 
 ## Architecture
@@ -403,23 +406,35 @@ Path: `~/.miniclaw/config.json`
 
 ## Code Style
 
-- TypeScript strict mode enabled
-- Prettier: single quotes, semicolons, 2-space indent, 100 char line width
-- ESLint: `@typescript-eslint/recommended` + explicit return types
+- TypeScript strict mode enabled with all strict checks (`strict`, `noImplicitAny`, `strictNullChecks`, etc.)
+- ESLint: `@typescript-eslint/recommended` + **explicit return types required** (`explicit-function-return-type: warn`)
+- Prettier: single quotes, semicolons, 2-space indent, 100 char line width, LF line endings
+- Path aliases available: `@/*` → `src/*`, `@core/*` → `src/core/*` (configured in tsconfig.json)
 - Chinese comments used throughout for documentation
 
 ## Active Technologies
 - TypeScript 5.x / Node.js 18+
-- Vitest (testing), Express 5.x, Socket.IO
+- Vitest (testing): 884 tests, 71 test files, coverage thresholds 70%/60%
+- Express 5.x, Socket.IO
 - @mariozechner/pi-agent-core (Agent framework), @mariozechner/pi-ai (streaming)
 - @mariozechner/pi-coding-agent (skill loading/formatting)
 - @larksuiteoapi/node-sdk (Feishu integration)
+- TypeScript 5.x / Node.js 18+ + @mariozechner/pi-agent-core, @mariozechner/pi-coding-agent, Express 5.x, Socket.IO (026-scheduler-hot-reload)
+- JSON 文件存储（`~/.miniclaw/scheduled-tasks.json`，`~/.miniclaw/config.json`） (026-scheduler-hot-reload)
+
+## Test Structure
+```
+tests/
+├── unit/           # 71 test files, isolated component tests
+├── integration/    # Cross-component tests
+├── e2e/            # End-to-end tests
+└── fixtures/       # Test fixtures and mocks
+```
 
 ## Recent Changes
-- 024-llm-importance-evaluation: LLM dynamically evaluates message importance
-- 022-memory-optimization: Three-layer memory architecture
-- 013-optimize-tool-injection: Tool filtering with allow/deny lists
-- 010-pi-skill-integration: Skill API for progressive disclosure
+- 026-scheduler-hot-reload: Added TypeScript 5.x / Node.js 18+ + @mariozechner/pi-agent-core, @mariozechner/pi-coding-agent, Express 5.x, Socket.IO
+- 026-windows-path-compat: Windows Git Bash 路径兼容 (issue #58)
+- 025-process-stability: 进程稳定性加固
 
 <!-- superpowers-zh:begin (do not edit between these markers) -->
 # Superpowers-ZH 中文增强版
