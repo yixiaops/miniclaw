@@ -18,9 +18,13 @@ import { MemoryManager } from './memory/manager.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
-import { getBuiltinTools, filterToolsByPolicy } from './tools/index.js';
+import { getBuiltinTools, filterToolsByPolicy, createSchedulerCreateTool, createSchedulerListTool, createSchedulerDeleteTool, createSchedulerUpdateTool } from './tools/index.js';
 import { SoulLoader } from './soul/index.js';
 import { setupGlobalExceptionHandler } from './core/exception-handler.js';
+import { TaskStore } from './scheduler/task-store.js';
+import { SchedulerManager } from './scheduler/manager.js';
+import { SessionKeyBuilder, type PeerScope, type ChannelScope } from './core/session-key/index.js';
+import { ConfigWatcher, type ConfigChangeEvent } from './config/watcher.js';
 
 /**
  * Shutdown handler 配置
@@ -34,6 +38,10 @@ export interface ShutdownHandlerConfig {
   subagentManager: SubagentManager;
   /** 记忆管理器（可选） */
   memoryManager?: MemoryManager;
+  /** Scheduler 管理器（可选） */
+  schedulerManager?: SchedulerManager;
+  /** ConfigWatcher（可选） */
+  configWatcher?: ConfigWatcher;
 }
 
 /**
@@ -43,13 +51,15 @@ export interface ShutdownHandlerConfig {
  * 1. await channel.stop() - 停止接收新消息
  * 2. await gateway.cleanup() - 持久化数据并清理资源
  * 3. subagentManager.destroy() - 销毁子代理
- * 4. memoryManager.destroy() - 销毁记忆管理器
+ * 4. schedulerManager.stopAll() - 停止所有调度任务
+ * 5. configWatcher.stop() - 停止配置监听
+ * 6. memoryManager.destroy() - 销毁记忆管理器
  *
  * @param config - Shutdown handler 配置
  * @returns shutdown handler 函数
  */
 export function setupShutdownHandler(config: ShutdownHandlerConfig): () => Promise<void> {
-  const { channel, gateway, subagentManager, memoryManager } = config;
+  const { channel, gateway, subagentManager, memoryManager, schedulerManager, configWatcher } = config;
 
   return async () => {
     console.log('\n正在关闭...');
@@ -63,7 +73,17 @@ export function setupShutdownHandler(config: ShutdownHandlerConfig): () => Promi
     // 3. 销毁子代理管理器
     subagentManager.destroy();
 
-    // 4. 销毁记忆管理器（如果存在）
+    // 4. 停止所有调度任务
+    if (schedulerManager) {
+      schedulerManager.stopAll();
+    }
+
+    // 5. 停止配置监听
+    if (configWatcher) {
+      configWatcher.stop();
+    }
+
+    // 6. 销毁记忆管理器（如果存在）
     if (memoryManager) {
       memoryManager.destroy();
     }
@@ -77,6 +97,7 @@ export function setupShutdownHandler(config: ShutdownHandlerConfig): () => Promi
  * @param subagentManager - 子代理管理器
  * @param promptManager - 提示词管理器
  * @param preloadedPrompts - 预加载的提示词映射
+ * @param taskStore - 定时任务存储
  * @param skillManager - 技能管理器（可选）
  * @param soulContent - Soul 内容（可选）
  */
@@ -85,6 +106,7 @@ function createAgentFactory(
   subagentManager: SubagentManager,
   _promptManager: PromptManager,
   preloadedPrompts: Map<string, string>,
+  taskStore: TaskStore,
   skillManager?: PiSkillManager,
   soulContent?: string
 ) {
@@ -96,6 +118,21 @@ function createAgentFactory(
     isSubagent?: boolean
   ) => {
     console.log(`[Gateway] 创建新 Agent: ${sessionKey} (type: ${agentId}, isSubagent: ${isSubagent || false})`);
+
+    // 解析 sessionKey 获取 userId 和 channel
+    const parsedSession = SessionKeyBuilder.parse(sessionKey);
+    let userId = 'unknown';
+    let channel: 'cli' | 'api' | 'web' | 'feishu' = 'cli';
+
+    if (parsedSession) {
+      const scope = parsedSession.scope;
+      if (scope.type === 'peer') {
+        userId = (scope as PeerScope).peerId;
+        channel = (scope as PeerScope).channel as 'cli' | 'api' | 'web' | 'feishu';
+      } else if (scope.type === 'channel') {
+        channel = (scope as ChannelScope).channel as 'cli' | 'api' | 'web' | 'feishu';
+      }
+    }
 
     // 使用预加载的提示词（如果存在）
     let systemPrompt = preloadedPrompts.get(agentId) || DEFAULT_SYSTEM_PROMPT;
@@ -196,6 +233,25 @@ function createAgentFactory(
     }) as any);
     agent.registerTool(createSubagentsTool(subagentManager) as any);
 
+    // 注册 Scheduler 工具
+    agent.registerTool(createSchedulerCreateTool(
+      taskStore,
+      () => userId,
+      () => channel
+    ) as any);
+    agent.registerTool(createSchedulerListTool(
+      taskStore,
+      () => userId
+    ) as any);
+    agent.registerTool(createSchedulerDeleteTool(
+      taskStore,
+      () => userId
+    ) as any);
+    agent.registerTool(createSchedulerUpdateTool(
+      taskStore,
+      () => userId
+    ) as any);
+
     return agent;
   };
 }
@@ -287,6 +343,28 @@ async function main() {
     console.log(`✓ MemoryManager 已初始化 (storageDir: ${storageDir})`);
   }
 
+  // 初始化 Scheduler 系统
+  console.log('\n初始化 Scheduler 系统...');
+  const schedulerStorageDir = path.join(homedir(), '.miniclaw');
+  const taskStore = new TaskStore(path.join(schedulerStorageDir, 'scheduled-tasks.json'));
+  const schedulerManager = new SchedulerManager(taskStore);
+  console.log(`✓ Scheduler 系统已初始化 (已加载 ${taskStore.getAll().length} 个任务)`);
+  console.log(`  - 已调度任务: ${schedulerManager.getScheduledCount()}`);
+
+  // 初始化 ConfigWatcher（配置热加载）
+  console.log('\n初始化 ConfigWatcher...');
+  const configWatcher = new ConfigWatcher({
+    onChange: (event: ConfigChangeEvent) => {
+      if (event.config?.agents) {
+        // 重新加载 Agent 配置
+        registry.loadConfigs(event.config.agents.list, event.config.agents.defaults);
+        console.log(`[ConfigWatcher] Agent 配置已重新加载 (${event.config.agents.list.length} 个)`);
+      }
+    },
+  });
+  await configWatcher.start();
+  console.log(`✓ ConfigWatcher 已初始化`);
+
   // 初始化 SoulLoader
   console.log('\n初始化 SoulLoader...');
   const soulLoader = new SoulLoader();
@@ -340,8 +418,8 @@ async function main() {
     }
   }
 
-  // 创建 Agent 工厂函数（传入 soul 内容）
-  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, skillManager, soulContent);
+  // 创建 Agent 工厂函数（传入 soul 内容和 scheduler 系统）
+  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, taskStore, skillManager, soulContent);
 
   // 更新 Registry 的创建函数（使用任意键设置私有属性）
   (registry as any).createAgentFn = createAgentFn;
@@ -356,6 +434,7 @@ async function main() {
   // 打印工具和 Agent 信息
   console.log(`已加载 ${getBuiltinTools().length} 个内置工具`);
   console.log(`已加载子代理工具: sessions_spawn, subagents`);
+  console.log(`已加载定时任务工具: scheduler_create, scheduler_list, scheduler_delete, scheduler_update`);
   printAgentInfo(registry);
 
   // 解析命令行参数
@@ -382,6 +461,8 @@ async function main() {
         await api.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        schedulerManager.stopAll();
+        configWatcher.stop();
         if (memoryManager) memoryManager.destroy();
         process.exit(0);
       });
@@ -402,6 +483,8 @@ async function main() {
         feishu.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        schedulerManager.stopAll();
+        configWatcher.stop();
         if (memoryManager) memoryManager.destroy();
         process.exit(0);
       });
@@ -423,6 +506,8 @@ async function main() {
         await apiChannel.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        schedulerManager.stopAll();
+        configWatcher.stop();
         if (memoryManager) memoryManager.destroy();
         process.exit(0);
       });
@@ -439,6 +524,8 @@ async function main() {
         await webChannel.stop();
         gateway.cleanup();
         subagentManager.destroy();
+        schedulerManager.stopAll();
+        configWatcher.stop();
         process.exit(0);
       });
       break;

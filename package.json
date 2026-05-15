@@ -60,9 +60,11 @@
     "@mariozechner/pi-tui": "^0.57.1",
     "@types/express": "^5.0.6",
     "@types/node": "^25.4.0",
+    "chokidar": "^5.0.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "fast-glob": "^3.3.3",
+    "node-cron": "^4.2.1",
     "socket.io": "^4.8.3",
     "yaml": "^2.8.3"
   }
