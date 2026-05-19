@@ -2,6 +2,10 @@
  * Miniclaw 主入口
  * 轻量级个人 AI 助手
  */
+
+// 设置进程名，使 ps aux | grep miniclaw 可见，可用 kill/pkill miniclaw 停止
+process.title = 'miniclaw';
+
 import 'dotenv/config';
 import path from 'path';
 import { homedir } from 'os';
@@ -503,20 +507,22 @@ async function main() {
       await feishu.start();
 
       // 设置 TaskExecutor（连接 scheduler 与飞书通道）
+      // 注意：content 直接传原始文本，feishuClient.sendMessage 内部会做 JSON.stringify
       const feishuClient = feishu.getClient();
       const executor = new TaskExecutor(taskStore, pendingStore, {
         sendMessage: async (userId: string, _channel: string, content: string) => {
           try {
-            await feishuClient.sendMessage({
+            const result = await feishuClient.sendMessage({
               receiveId: userId,
               receiveIdType: 'open_id',
               msgType: 'text',
-              content: JSON.stringify({ text: content }),
+              content: content,
             });
-            return true;
+            console.log(`[Scheduler] 消息已发送给用户 ${userId}, messageId=${result.messageId}`);
+            return { success: true, messageId: result.messageId };
           } catch (e) {
             console.error('[Scheduler] 发送消息失败:', e);
-            return false;
+            return { success: false };
           }
         },
         spawnAgent: async (params: { task: string; agentId: string }) => {
@@ -535,12 +541,23 @@ async function main() {
       schedulerManager.setExecutor(executor);
       console.log('✓ TaskExecutor 已连接');
 
-      // 定时轮询：每分钟检查待执行任务（处理 node-cron 未覆盖的场景）
+      // 连接 executor → WebSocket 的 sentMessageIds，防止回声循环
+      const websocket = feishu.getWebSocket();
+      executor.setOnMessageSent((messageId: string) => {
+        websocket.registerSentMessageId(messageId);
+      });
+
+      // 定时轮询：每分钟检查一次性任务（node-cron 只处理 recurring，polling 处理 one-time）
       const pollingInterval = setInterval(async () => {
         try {
-          const dueTasks = taskStore.getTasksToExecute(new Date());
-          for (const task of dueTasks) {
-            console.log(`[Scheduler] 轮询执行任务: ${task.summary}`);
+          const allTasks = taskStore.getByStatus('pending');
+          const nowTime = Date.now();
+          for (const task of allTasks) {
+            // polling 只处理一次性任务，避免与 node-cron 重复执行
+            if (task.taskType !== 'one-time') continue;
+            const executeTime = new Date(task.executeTime).getTime();
+            if (isNaN(executeTime) || executeTime > nowTime) continue;
+            console.log(`[Scheduler] 轮询执行一次性任务: ${task.summary}`);
             await executor.execute(task);
           }
         } catch (e) {

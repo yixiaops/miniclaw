@@ -19,12 +19,12 @@ const MAX_RETRY_COUNT = 3;
 
 /** 执行器回调接口 */
 export interface ExecutorCallbacks {
-  /** 发送消息回调 */
+  /** 发送消息回调，返回 message ID 用于回声过滤 */
   sendMessage: (
     userId: string,
     channel: Channel,
     content: string
-  ) => boolean | Promise<boolean>;
+  ) => Promise<{ success: boolean; messageId?: string }>;
   /** 调用子 Agent 回调 */
   spawnAgent: (params: { task: string; agentId: string }) => Promise<{ success: boolean; result?: string }>;
 }
@@ -76,20 +76,33 @@ export class TaskExecutor {
     }
   }
 
+  /** 消息发送成功回调，用于回声过滤 */
+  private onMessageSent?: (messageId: string) => void;
+
+  /**
+   * 设置消息发送成功回调
+   */
+  setOnMessageSent(callback: (messageId: string) => void): void {
+    this.onMessageSent = callback;
+  }
+
   /**
    * 执行提醒类型任务
    */
   private async executeReminder(
     task: ScheduledTask
   ): Promise<{ success: boolean; status: 'executed' | 'waiting-push' }> {
-    const sent = await this.callbacks.sendMessage(
+    const result = await this.callbacks.sendMessage(
       task.userId,
       task.channel,
       task.content
     );
 
-    if (sent) {
-      // 消息发送成功
+    if (result.success) {
+      // 注册消息 ID，防止 WebSocket 回声
+      if (result.messageId && this.onMessageSent) {
+        this.onMessageSent(result.messageId);
+      }
       this.markExecuted(task.taskId, task.taskType);
       return { success: true, status: 'executed' };
     } else {

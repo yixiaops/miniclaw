@@ -35,6 +35,9 @@ export class FeishuWebSocket {
   private messageCallback: ((event: FeishuEvent) => void) | null = null;
   private stopped: boolean = false;
 
+  // 记录自己发送的消息 ID，防止回声循环
+  private sentMessageIds: Set<string> = new Set();
+
   constructor(
     config: { appId: string; appSecret: string },
     client: FeishuClient,
@@ -126,12 +129,30 @@ export class FeishuWebSocket {
   }
 
   /**
+   * 注册自己发送的消息 ID，防止回声循环
+   */
+  registerSentMessageId(messageId: string): void {
+    this.sentMessageIds.add(messageId);
+    // 定期清理，防止无限增长
+    if (this.sentMessageIds.size > 1000) {
+      const arr = Array.from(this.sentMessageIds);
+      this.sentMessageIds = new Set(arr.slice(-500));
+    }
+  }
+
+  /**
    * 处理消息
    */
   private handleMessage(data: any): void {
     try {
       const message = data.message;
       const sender = data.sender?.sender_id || {};
+
+      // 过滤自己发送的消息（防止 scheduler 回声循环）
+      if (this.sentMessageIds.has(message.message_id)) {
+        console.log(`[WebSocket] 忽略自己发送的消息: ${message.message_id}`);
+        return;
+      }
 
       // 解析内容
       let content = '';
