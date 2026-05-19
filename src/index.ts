@@ -2,6 +2,10 @@
  * Miniclaw 主入口
  * 轻量级个人 AI 助手
  */
+
+// 设置进程名，使 ps aux | grep miniclaw 可见，可用 kill/pkill miniclaw 停止
+process.title = 'miniclaw';
+
 import 'dotenv/config';
 import path from 'path';
 import { homedir } from 'os';
@@ -23,6 +27,8 @@ import { SoulLoader } from './soul/index.js';
 import { setupGlobalExceptionHandler } from './core/exception-handler.js';
 import { TaskStore } from './scheduler/task-store.js';
 import { SchedulerManager } from './scheduler/manager.js';
+import { TaskExecutor } from './scheduler/executor.js';
+import { PendingMessageStore } from './scheduler/pending-store.js';
 import { SessionKeyBuilder, type PeerScope, type ChannelScope } from './core/session-key/index.js';
 import { ConfigWatcher, type ConfigChangeEvent } from './config/watcher.js';
 
@@ -347,6 +353,29 @@ async function main() {
   console.log('\n初始化 Scheduler 系统...');
   const schedulerStorageDir = path.join(homedir(), '.miniclaw');
   const taskStore = new TaskStore(path.join(schedulerStorageDir, 'scheduled-tasks.json'));
+  const pendingStore = new PendingMessageStore();
+
+  // 如果没有任务，创建默认的每日 8:00 工作总结任务
+  if (taskStore.getAll().length === 0) {
+    const { randomUUID } = await import('crypto');
+    const now = new Date();
+    const defaultTask = {
+      taskId: randomUUID(),
+      userId: 'ou_cea5164ad6cbd076e3fa075f8af6bef9',
+      channel: 'feishu' as const,
+      content: '早上好！请生成今日工作总结和计划。回顾最近的开发进展，列出今天的重点任务。',
+      summary: '每日工作总结',
+      executeTime: '0 8 * * *',
+      taskType: 'recurring' as const,
+      actionType: 'reminder' as const,
+      status: 'pending' as const,
+      createdAt: now.toISOString(),
+      retryCount: 0,
+    };
+    taskStore.create(defaultTask);
+    console.log('✓ 已创建默认定时任务: 每日 8:00 工作总结');
+  }
+
   const schedulerManager = new SchedulerManager(taskStore);
   console.log(`✓ Scheduler 系统已初始化 (已加载 ${taskStore.getAll().length} 个任务)`);
   console.log(`  - 已调度任务: ${schedulerManager.getScheduledCount()}`);
@@ -477,9 +506,69 @@ async function main() {
       const feishu = new FeishuChannel(gateway);
       await feishu.start();
 
+      // 设置 TaskExecutor（连接 scheduler 与飞书通道）
+      // 注意：content 直接传原始文本，feishuClient.sendMessage 内部会做 JSON.stringify
+      const feishuClient = feishu.getClient();
+      const executor = new TaskExecutor(taskStore, pendingStore, {
+        sendMessage: async (userId: string, _channel: string, content: string) => {
+          try {
+            const result = await feishuClient.sendMessage({
+              receiveId: userId,
+              receiveIdType: 'open_id',
+              msgType: 'text',
+              content: content,
+            });
+            console.log(`[Scheduler] 消息已发送给用户 ${userId}, messageId=${result.messageId}`);
+            return { success: true, messageId: result.messageId };
+          } catch (e) {
+            console.error('[Scheduler] 发送消息失败:', e);
+            return { success: false };
+          }
+        },
+        spawnAgent: async (params: { task: string; agentId: string }) => {
+          try {
+            const result = await subagentManager.spawn({
+              agentId: params.agentId,
+              task: params.task,
+            });
+            return { success: true, result };
+          } catch (e) {
+            console.error('[Scheduler] 子代理执行失败:', e);
+            return { success: false };
+          }
+        },
+      });
+      schedulerManager.setExecutor(executor);
+      console.log('✓ TaskExecutor 已连接');
+
+      // 连接 executor → WebSocket 的 sentMessageIds，防止回声循环
+      const websocket = feishu.getWebSocket();
+      executor.setOnMessageSent((messageId: string) => {
+        websocket.registerSentMessageId(messageId);
+      });
+
+      // 定时轮询：每分钟检查一次性任务（node-cron 只处理 recurring，polling 处理 one-time）
+      const pollingInterval = setInterval(async () => {
+        try {
+          const allTasks = taskStore.getByStatus('pending');
+          const nowTime = Date.now();
+          for (const task of allTasks) {
+            // polling 只处理一次性任务，避免与 node-cron 重复执行
+            if (task.taskType !== 'one-time') continue;
+            const executeTime = new Date(task.executeTime).getTime();
+            if (isNaN(executeTime) || executeTime > nowTime) continue;
+            console.log(`[Scheduler] 轮询执行一次性任务: ${task.summary}`);
+            await executor.execute(task);
+          }
+        } catch (e) {
+          console.error('[Scheduler] 轮询执行失败:', e);
+        }
+      }, 60 * 1000);
+
       // 保持进程运行
       process.on('SIGINT', () => {
         console.log('\n正在关闭...');
+        clearInterval(pollingInterval);
         feishu.stop();
         gateway.cleanup();
         subagentManager.destroy();

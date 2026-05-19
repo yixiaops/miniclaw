@@ -170,6 +170,9 @@ describe('PendingMessageStore', () => {
       store.add(expiredMessage);
 
       store.add(createMockMessage('fresh'));
+      // Override fresh message createdAt to recent time
+      store.getAll().find(m => m.messageId === 'fresh')!.createdAt = now.toISOString();
+      store['save']();
 
       const removedCount = store.cleanExpired(24 * 60 * 60 * 1000); // 24小时
       expect(removedCount).toBe(1);

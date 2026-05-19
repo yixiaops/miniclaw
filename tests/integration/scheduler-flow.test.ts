@@ -55,7 +55,7 @@ describe('Scheduler Flow Integration', () => {
 
     mockSendMessage.mockClear();
     mockSpawnAgent.mockClear();
-    mockSendMessage.mockReturnValue(true); // 默认用户在线
+    mockSendMessage.mockResolvedValue({ success: true }); // 默认用户在线
   });
 
   afterEach(() => {
@@ -137,7 +137,7 @@ describe('Scheduler Flow Integration', () => {
 
   describe('离线用户流程', () => {
     it('should store pending message when user offline', async () => {
-      mockSendMessage.mockReturnValue(false); // 用户离线
+      mockSendMessage.mockResolvedValue({ success: false }); // 用户离线
 
       const task = {
         taskId: 'offline-flow',
