@@ -200,4 +200,11 @@ export class SchedulerManager {
   getScheduledTaskIds(): string[] {
     return Array.from(this.scheduledJobs.keys());
   }
+
+  /**
+   * 设置任务执行器（延迟初始化）
+   */
+  setExecutor(executor: TaskExecutor): void {
+    this.executor = executor;
+  }
 }

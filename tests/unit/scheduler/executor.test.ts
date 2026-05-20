@@ -58,7 +58,7 @@ describe('TaskExecutor', () => {
 
     mockSendMessage.mockClear();
     mockSpawnAgent.mockClear();
-    mockSendMessage.mockReturnValue(true); // 默认用户在线
+    mockSendMessage.mockResolvedValue({ success: true }); // 默认用户在线
   });
 
   describe('提醒类型任务', () => {
@@ -88,7 +88,7 @@ describe('TaskExecutor', () => {
 
     it('should store pending message when user offline', async () => {
       // Mock sendMessage 返回 false（用户离线）
-      mockSendMessage.mockReturnValue(false);
+      mockSendMessage.mockResolvedValue({ success: false });
 
       const task = createMockTask('offline-task');
       taskStore.create(task);
