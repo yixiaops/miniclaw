@@ -527,19 +527,21 @@ async function main() {
         },
         spawnAgent: async (params: { task: string; agentId: string }) => {
           try {
-            const result = await subagentManager.spawn({
+            const result = await subagentManager.spawnAndExecute({
               agentId: params.agentId,
               task: params.task,
             });
-            return { success: true, result };
+            return { success: result.success, result: result.data, error: result.error };
           } catch (e) {
-            console.error('[Scheduler] 子代理执行失败:', e);
-            return { success: false };
+            const message = e instanceof Error ? e.message : String(e);
+            console.error('[Scheduler] 子代理执行失败:', message);
+            return { success: false, error: message };
           }
         },
       });
       schedulerManager.setExecutor(executor);
-      console.log('✓ TaskExecutor 已连接');
+      schedulerManager.scheduleAllPending();
+      console.log('✓ TaskExecutor 已连接，调度器已加载待执行任务');
 
       // 连接 executor → WebSocket 的 sentMessageIds，防止回声循环
       const websocket = feishu.getWebSocket();

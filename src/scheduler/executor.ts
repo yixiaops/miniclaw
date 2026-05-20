@@ -26,7 +26,11 @@ export interface ExecutorCallbacks {
     content: string
   ) => Promise<{ success: boolean; messageId?: string }>;
   /** 调用子 Agent 回调 */
-  spawnAgent: (params: { task: string; agentId: string }) => Promise<{ success: boolean; result?: string }>;
+  spawnAgent: (params: { task: string; agentId: string }) => Promise<{
+    success: boolean;
+    result?: string;
+    error?: string;
+  }>;
 }
 
 /**
@@ -131,10 +135,21 @@ export class TaskExecutor {
     });
 
     if (result.success) {
+      // 子代理执行成功，将结果发送给用户
+      if (result.result) {
+        const sendResult = await this.callbacks.sendMessage(
+          task.userId,
+          task.channel,
+          result.result
+        );
+        if (sendResult.success && sendResult.messageId && this.onMessageSent) {
+          this.onMessageSent(sendResult.messageId);
+        }
+      }
       this.markExecuted(task.taskId, task.taskType);
       return { success: true, status: 'executed' };
     } else {
-      return this.handleFailure(task, new Error('Agent spawn failed'));
+      return this.handleFailure(task, new Error(result.error || 'Agent spawn failed'));
     }
   }
 
