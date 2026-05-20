@@ -62,12 +62,15 @@ describe('SchedulerManager', () => {
   });
 
   describe('初始化', () => {
-    it('should load pending tasks on initialization', () => {
+    it('should load pending tasks when scheduleAllPending is called', () => {
       store.create(createMockTask('init-task'));
 
       const newManager = new SchedulerManager(store);
-      const scheduledCount = newManager.getScheduledCount();
-      expect(scheduledCount).toBe(1);
+      expect(newManager.getScheduledCount()).toBe(0);
+
+      // 显式调用后才会调度
+      newManager.scheduleAllPending();
+      expect(newManager.getScheduledCount()).toBe(1);
     });
   });
 
