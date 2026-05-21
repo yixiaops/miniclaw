@@ -361,7 +361,7 @@ async function main() {
     const now = new Date();
     const defaultTask = {
       taskId: randomUUID(),
-      userId: 'ou_cea5164ad6cbd076e3fa075f8af6bef9',
+      userId: 'ou_4a3e14f7cc75303080e1f1e5f1518266',
       channel: 'feishu' as const,
       content: '早上好！请生成今日工作总结和计划。回顾最近的开发进展，列出今天的重点任务。',
       summary: '每日工作总结',
