@@ -20,6 +20,7 @@ export { createSchedulerCreateTool, type SchedulerCreateTool, type SchedulerCrea
 export { createSchedulerListTool, type SchedulerListTool } from './scheduler-list.js';
 export { createSchedulerDeleteTool, type SchedulerDeleteTool } from './scheduler-delete.js';
 export { createSchedulerUpdateTool, type SchedulerUpdateTool } from './scheduler-update.js';
+export { createSchedulerLogsTool, type SchedulerLogsTool } from './scheduler-logs.js';
 
 // 导出工具过滤功能
 export {
