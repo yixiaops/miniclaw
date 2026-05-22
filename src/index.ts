@@ -22,13 +22,14 @@ import { MemoryManager } from './memory/manager.js';
 import { CliChannel } from './channels/cli.js';
 import { ApiChannel } from './channels/api.js';
 import { FeishuChannel } from './channels/feishu.js';
-import { getBuiltinTools, filterToolsByPolicy, createSchedulerCreateTool, createSchedulerListTool, createSchedulerDeleteTool, createSchedulerUpdateTool } from './tools/index.js';
+import { getBuiltinTools, filterToolsByPolicy, createSchedulerCreateTool, createSchedulerListTool, createSchedulerDeleteTool, createSchedulerUpdateTool, createSchedulerLogsTool } from './tools/index.js';
 import { SoulLoader } from './soul/index.js';
 import { setupGlobalExceptionHandler } from './core/exception-handler.js';
 import { TaskStore } from './scheduler/task-store.js';
 import { SchedulerManager } from './scheduler/manager.js';
 import { TaskExecutor } from './scheduler/executor.js';
 import { PendingMessageStore } from './scheduler/pending-store.js';
+import { ExecutionLogStore } from './scheduler/execution-log-store.js';
 import { SessionKeyBuilder, type PeerScope, type ChannelScope } from './core/session-key/index.js';
 import { ConfigWatcher, type ConfigChangeEvent } from './config/watcher.js';
 
@@ -104,6 +105,7 @@ export function setupShutdownHandler(config: ShutdownHandlerConfig): () => Promi
  * @param promptManager - 提示词管理器
  * @param preloadedPrompts - 预加载的提示词映射
  * @param taskStore - 定时任务存储
+ * @param executionLogStore - 执行日志存储
  * @param skillManager - 技能管理器（可选）
  * @param soulContent - Soul 内容（可选）
  */
@@ -113,6 +115,7 @@ function createAgentFactory(
   _promptManager: PromptManager,
   preloadedPrompts: Map<string, string>,
   taskStore: TaskStore,
+  executionLogStore: ExecutionLogStore,
   skillManager?: PiSkillManager,
   soulContent?: string
 ) {
@@ -257,6 +260,11 @@ function createAgentFactory(
       taskStore,
       () => userId
     ) as any);
+    agent.registerTool(createSchedulerLogsTool(
+      executionLogStore,
+      taskStore,
+      () => userId
+    ) as any);
 
     return agent;
   };
@@ -361,7 +369,7 @@ async function main() {
     const now = new Date();
     const defaultTask = {
       taskId: randomUUID(),
-      userId: 'ou_cea5164ad6cbd076e3fa075f8af6bef9',
+      userId: 'ou_4a3e14f7cc75303080e1f1e5f1518266',
       channel: 'feishu' as const,
       content: '早上好！请生成今日工作总结和计划。回顾最近的开发进展，列出今天的重点任务。',
       summary: '每日工作总结',
@@ -376,9 +384,26 @@ async function main() {
     console.log('✓ 已创建默认定时任务: 每日 8:00 工作总结');
   }
 
+  // 初始化执行日志存储
+  const executionLogStore = new ExecutionLogStore();
+  const logStats = executionLogStore.getStats();
+  console.log(`✓ 执行日志已加载 (${logStats.total} 条记录: 成功 ${logStats.success}, 失败 ${logStats.failed})`);
+
   const schedulerManager = new SchedulerManager(taskStore);
-  console.log(`✓ Scheduler 系统已初始化 (已加载 ${taskStore.getAll().length} 个任务)`);
+  const allTasks = taskStore.getAll();
+  console.log(`✓ Scheduler 系统已初始化 (已加载 ${allTasks.length} 个任务)`);
   console.log(`  - 已调度任务: ${schedulerManager.getScheduledCount()}`);
+  if (allTasks.length > 0) {
+    console.log('  定时任务列表:');
+    for (const t of allTasks) {
+      const nextInfo = t.taskType === 'recurring'
+        ? `cron: ${t.executeTime}`
+        : `一次: ${t.executeTime}`;
+      console.log(`    - [${t.taskId.slice(0, 8)}] ${t.summary} | ${nextInfo} | ${t.actionType} | ${t.status}`);
+    }
+  } else {
+    console.log('  定时任务列表: (空)');
+  }
 
   // 初始化 ConfigWatcher（配置热加载）
   console.log('\n初始化 ConfigWatcher...');
@@ -448,7 +473,7 @@ async function main() {
   }
 
   // 创建 Agent 工厂函数（传入 soul 内容和 scheduler 系统）
-  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, taskStore, skillManager, soulContent);
+  const createAgentFn = createAgentFactory(registry, subagentManager, promptManager, preloadedPrompts, taskStore, executionLogStore, skillManager, soulContent);
 
   // 更新 Registry 的创建函数（使用任意键设置私有属性）
   (registry as any).createAgentFn = createAgentFn;
@@ -527,19 +552,21 @@ async function main() {
         },
         spawnAgent: async (params: { task: string; agentId: string }) => {
           try {
-            const result = await subagentManager.spawn({
+            const result = await subagentManager.spawnAndExecute({
               agentId: params.agentId,
               task: params.task,
             });
-            return { success: true, result };
+            return { success: result.success, result: result.data, error: result.error };
           } catch (e) {
-            console.error('[Scheduler] 子代理执行失败:', e);
-            return { success: false };
+            const message = e instanceof Error ? e.message : String(e);
+            console.error('[Scheduler] 子代理执行失败:', message);
+            return { success: false, error: message };
           }
         },
-      });
+      }, executionLogStore);
       schedulerManager.setExecutor(executor);
-      console.log('✓ TaskExecutor 已连接');
+      schedulerManager.scheduleAllPending();
+      console.log('✓ TaskExecutor 已连接，调度器已加载待执行任务');
 
       // 连接 executor → WebSocket 的 sentMessageIds，防止回声循环
       const websocket = feishu.getWebSocket();

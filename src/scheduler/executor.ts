@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 import { TaskStore } from './task-store.js';
 import { PendingMessageStore } from './pending-store.js';
+import { ExecutionLogStore } from './execution-log-store.js';
 import { randomUUID } from 'crypto';
 
 /** 最大重试次数 */
@@ -26,7 +27,11 @@ export interface ExecutorCallbacks {
     content: string
   ) => Promise<{ success: boolean; messageId?: string }>;
   /** 调用子 Agent 回调 */
-  spawnAgent: (params: { task: string; agentId: string }) => Promise<{ success: boolean; result?: string }>;
+  spawnAgent: (params: { task: string; agentId: string }) => Promise<{
+    success: boolean;
+    result?: string;
+    error?: string;
+  }>;
 }
 
 /**
@@ -35,6 +40,7 @@ export interface ExecutorCallbacks {
 export class TaskExecutor {
   private taskStore: TaskStore;
   private pendingStore: PendingMessageStore;
+  private executionLogStore: ExecutionLogStore;
   private callbacks: ExecutorCallbacks;
 
   /**
@@ -47,10 +53,12 @@ export class TaskExecutor {
   constructor(
     taskStore: TaskStore,
     pendingStore: PendingMessageStore,
-    callbacks: ExecutorCallbacks
+    callbacks: ExecutorCallbacks,
+    executionLogStore?: ExecutionLogStore
   ) {
     this.taskStore = taskStore;
     this.pendingStore = pendingStore;
+    this.executionLogStore = executionLogStore || new ExecutionLogStore();
     this.callbacks = callbacks;
   }
 
@@ -103,10 +111,23 @@ export class TaskExecutor {
       if (result.messageId && this.onMessageSent) {
         this.onMessageSent(result.messageId);
       }
+      this.executionLogStore.record(
+        task.taskId,
+        'success',
+        task.channel,
+        true
+      );
       this.markExecuted(task.taskId, task.taskType);
       return { success: true, status: 'executed' };
     } else {
       // 用户离线，存入待推送
+      this.executionLogStore.record(
+        task.taskId,
+        'waiting',
+        task.channel,
+        false,
+        'User offline, message queued for delivery'
+      );
       this.storePending(task);
       this.taskStore.update(task.taskId, { status: 'waiting-push' });
       return { success: false, status: 'waiting-push' };
@@ -131,10 +152,42 @@ export class TaskExecutor {
     });
 
     if (result.success) {
+      // 子代理执行成功，将结果发送给用户
+      if (result.result) {
+        const sendResult = await this.callbacks.sendMessage(
+          task.userId,
+          task.channel,
+          result.result
+        );
+        if (sendResult.success && sendResult.messageId && this.onMessageSent) {
+          this.onMessageSent(sendResult.messageId);
+        }
+        this.executionLogStore.record(
+          task.taskId,
+          'success',
+          task.channel,
+          true
+        );
+      } else {
+        this.executionLogStore.record(
+          task.taskId,
+          'success',
+          task.channel,
+          false,
+          'Agent executed but returned no result content'
+        );
+      }
       this.markExecuted(task.taskId, task.taskType);
       return { success: true, status: 'executed' };
     } else {
-      return this.handleFailure(task, new Error('Agent spawn failed'));
+      this.executionLogStore.record(
+        task.taskId,
+        'failed',
+        task.channel,
+        false,
+        result.error || 'Agent spawn failed'
+      );
+      return this.handleFailure(task, new Error(result.error || 'Agent spawn failed'));
     }
   }
 
@@ -153,7 +206,16 @@ export class TaskExecutor {
   /**
    * 标记任务失败
    */
-  private markFailed(taskId: string, _errorMessage: string): void {
+  private markFailed(taskId: string, errorMessage: string): void {
+    // 获取任务以获取渠道信息
+    const task = this.taskStore.getById(taskId);
+    this.executionLogStore.record(
+      taskId,
+      'failed',
+      task?.channel || 'cli',
+      false,
+      errorMessage
+    );
     this.taskStore.update(taskId, {
       status: 'failed',
     });

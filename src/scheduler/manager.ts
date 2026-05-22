@@ -30,9 +30,7 @@ export class SchedulerManager {
   constructor(taskStore: TaskStore, executor?: TaskExecutor) {
     this.taskStore = taskStore;
     this.executor = executor;
-
-    // 初始化时加载所有 pending 任务
-    this.loadPendingTasks();
+    // 不在此处自动调度，等待 executor 配置后由外部调用 scheduleAllPending()
   }
 
   /**
