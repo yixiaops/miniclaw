@@ -9,18 +9,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MemoryCandidatePool } from '../../../src/memory/store/candidate-pool.js';
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { unlinkSync, existsSync } from 'fs';
 
 describe('MemoryCandidatePool', () => {
   let candidatePool: MemoryCandidatePool;
   let sessionManager: SessionManager;
+  // 使用独立的临时文件路径，避免与生产数据冲突
+  const testFilePath = join(tmpdir(), 'miniclaw-test-candidate-pool.json');
 
   beforeEach(() => {
+    // 清理测试文件，确保每个测试从空池开始
+    if (existsSync(testFilePath)) {
+      unlinkSync(testFilePath);
+    }
     sessionManager = new SessionManager();
-    candidatePool = new MemoryCandidatePool(sessionManager);
+    candidatePool = new MemoryCandidatePool(sessionManager, {}, testFilePath);
   });
 
   afterEach(() => {
     candidatePool.clear();
+    // 清理测试文件
+    if (existsSync(testFilePath)) {
+      unlinkSync(testFilePath);
+    }
   });
 
   describe('write', () => {
@@ -168,10 +181,14 @@ describe('MemoryCandidatePool', () => {
     });
 
     it('should respect config.maxEntries override', () => {
+      const customPoolFilePath = join(tmpdir(), 'miniclaw-test-custom-pool.json');
+      if (existsSync(customPoolFilePath)) {
+        unlinkSync(customPoolFilePath);
+      }
       const customPool = new MemoryCandidatePool(sessionManager, {
         maxEntries: 100,
         evictCount: 10
-      });
+      }, customPoolFilePath);
       expect(customPool.maxEntries).toBe(100);
       expect(customPool.evictCount).toBe(10);
     });
@@ -231,11 +248,16 @@ describe('MemoryCandidatePool', () => {
 
   describe('write with capacity check', () => {
     it('should trigger eviction when at capacity', async () => {
+      // 使用独立的测试文件路径
+      const smallPoolFilePath = join(tmpdir(), 'miniclaw-test-small-pool-1.json');
+      if (existsSync(smallPoolFilePath)) {
+        unlinkSync(smallPoolFilePath);
+      }
       // 创建容量为 10 的池
       const smallPool = new MemoryCandidatePool(sessionManager, {
         maxEntries: 10,
         evictCount: 2
-      });
+      }, smallPoolFilePath);
 
       const sessionId = 'session-123';
       // 写入 10 条低 importance
@@ -252,10 +274,15 @@ describe('MemoryCandidatePool', () => {
     });
 
     it('should keep high importance entries when evicting', async () => {
+      // 使用独立的测试文件路径
+      const smallPoolFilePath = join(tmpdir(), 'miniclaw-test-small-pool-2.json');
+      if (existsSync(smallPoolFilePath)) {
+        unlinkSync(smallPoolFilePath);
+      }
       const smallPool = new MemoryCandidatePool(sessionManager, {
         maxEntries: 10,
         evictCount: 2
-      });
+      }, smallPoolFilePath);
 
       const sessionId = 'session-123';
       // 写入低 importance

@@ -17,6 +17,7 @@ import { MemoryPromoter } from '../../src/memory/promotion/promoter.js';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdir, rm } from 'fs/promises';
+import { unlinkSync, existsSync } from 'fs';
 
 /**
  * 创建测试用的记忆条目（模拟已过期）
@@ -45,15 +46,21 @@ describe('Importance Flow Integration Tests', () => {
   let longTerm: LongTermMemory;
   let promoter: MemoryPromoter;
   let ttlManager: TTLManager;
+  // 使用独立的候选池文件路径
+  const testCandidatePoolFilePath = join(tmpdir(), 'miniclaw-test-importance-flow-pool.json');
 
   beforeEach(async () => {
+    // 清理候选池文件
+    if (existsSync(testCandidatePoolFilePath)) {
+      unlinkSync(testCandidatePoolFilePath);
+    }
     testDir = join(tmpdir(), `importance-flow-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
 
     sessionManager = new SessionManager();
     candidatePool = new MemoryCandidatePool(sessionManager, {
       defaultTTL: 0 // 立即过期便于测试
-    });
+    }, testCandidatePoolFilePath);
     longTerm = new LongTermMemory(testDir);
     promoter = new MemoryPromoter(candidatePool, longTerm);
     ttlManager = new TTLManager(candidatePool, promoter);

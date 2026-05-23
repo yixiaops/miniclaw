@@ -8,6 +8,15 @@
 
 import type { MemoryEntry, MemoryMetadata } from './interface.js';
 import { SessionManager } from './session-manager.js';
+import fs from 'fs';
+import path from 'path';
+import { homedir } from 'os';
+
+/** 候选池存储结构 */
+interface CandidatePoolStoreData {
+  entries: MemoryEntry[];
+  savedAt: string;
+}
 
 /**
  * 记忆晋升器接口
@@ -51,6 +60,8 @@ export class MemoryCandidatePool {
   private sessionManager: SessionManager;
   /** 记忆晋升器 */
   private promoter?: MemoryPromoter;
+  /** 持久化文件路径 */
+  private filePath: string;
   /** 配置 */
   private config: CandidatePoolConfig = {
     defaultTTL: 24 * 60 * 60 * 1000, // 24h
@@ -80,11 +91,71 @@ export class MemoryCandidatePool {
    *
    * @param sessionManager - Session 管理器
    * @param config - 配置选项（可选）
+   * @param filePath - 持久化文件路径（可选，默认 ~/.miniclaw/candidate-pool.json）
    */
-  constructor(sessionManager: SessionManager, config?: Partial<CandidatePoolConfig>) {
+  constructor(
+    sessionManager: SessionManager,
+    config?: Partial<CandidatePoolConfig>,
+    filePath?: string
+  ) {
     this.sessionManager = sessionManager;
+    this.filePath = filePath || path.join(homedir(), '.miniclaw', 'candidate-pool.json');
     if (config) {
       this.config = { ...this.config, ...config };
+    }
+    // 启动时加载持久化数据
+    this.loadFromFile();
+  }
+
+  /**
+   * 从文件加载候选池数据
+   */
+  private loadFromFile(): void {
+    try {
+      if (!fs.existsSync(this.filePath)) {
+        return; // 文件不存在，使用空存储
+      }
+
+      const content = fs.readFileSync(this.filePath, 'utf-8');
+      const data: CandidatePoolStoreData = JSON.parse(content);
+
+      // 恢复记忆条目
+      for (const entry of data.entries || []) {
+        // 恢复 Date 对象
+        entry.createdAt = new Date(entry.createdAt);
+        entry.updatedAt = new Date(entry.updatedAt);
+        if (entry.metadata.timestamp) {
+          entry.metadata.timestamp = new Date(entry.metadata.timestamp);
+        }
+        this.store.set(entry.id, entry);
+      }
+
+      console.log(`[CandidatePool] 从文件加载了 ${this.store.size} 条候选记忆`);
+    } catch (error) {
+      console.warn(`[CandidatePool] 加载失败，使用空存储: ${error}`);
+    }
+  }
+
+  /**
+   * 持久化候选池数据到文件
+   */
+  persist(): void {
+    try {
+      const dir = path.dirname(this.filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const entries = Array.from(this.store.values());
+      const data: CandidatePoolStoreData = {
+        entries,
+        savedAt: new Date().toISOString()
+      };
+
+      fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
+      console.log(`[CandidatePool] 持久化了 ${entries.length} 条候选记忆`);
+    } catch (error) {
+      console.warn(`[CandidatePool] 持久化失败: ${error}`);
     }
   }
 

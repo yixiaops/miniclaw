@@ -34,16 +34,6 @@ export class SchedulerManager {
   }
 
   /**
-   * 加载所有待执行任务并调度
-   */
-  private loadPendingTasks(): void {
-    const pendingTasks = this.taskStore.getByStatus('pending');
-    for (const task of pendingTasks) {
-      this.scheduleTask(task);
-    }
-  }
-
-  /**
    * 验证 cron 表达式是否有效
    *
    * @param expression - cron 表达式
@@ -112,17 +102,26 @@ export class SchedulerManager {
    * 触发任务执行
    */
   private async triggerExecution(task: ScheduledTask): Promise<void> {
+    // 醒目的执行日志
+    console.log(`\n${'═'.repeat(50)}`);
+    console.log(`⏰ [定时任务触发] ${task.summary}`);
+    console.log(`📅 执行时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
+    console.log(`📝 任务类型: ${task.actionType} (${task.taskType})`);
+    console.log(`👤 目标用户: ${task.userId}`);
+    console.log(`${'═'.repeat(50)}\n`);
+
     if (this.executor) {
       await this.executor.execute(task);
     } else {
       console.log(
-        `[SchedulerManager] Task ${task.taskId} triggered (no executor configured)`
+        `[SchedulerManager] ⚠️ Task ${task.taskId} triggered (no executor configured)`
       );
     }
 
     // 一次性任务执行后自动取消调度
     if (task.taskType === 'one-time') {
       this.cancelTask(task.taskId);
+      console.log(`[SchedulerManager] ✓ 一次性任务 ${task.taskId.slice(0, 8)} 已完成并取消调度`);
     }
   }
 

@@ -9,12 +9,19 @@ import { MemoryManager } from '../../../src/memory/manager.js';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdir, rm } from 'fs/promises';
+import { unlinkSync, existsSync } from 'fs';
 
 describe('MemoryManager', () => {
   let manager: MemoryManager;
   let testDir: string;
+  // 使用独立的候选池文件路径
+  const testCandidatePoolFilePath = join(tmpdir(), 'miniclaw-test-manager-candidate-pool.json');
 
   beforeEach(async () => {
+    // 清理候选池文件
+    if (existsSync(testCandidatePoolFilePath)) {
+      unlinkSync(testCandidatePoolFilePath);
+    }
     // 创建临时测试目录
     testDir = join(tmpdir(), `memory-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
@@ -22,13 +29,18 @@ describe('MemoryManager', () => {
     manager = new MemoryManager({
       storageDir: testDir,
       defaultTTL: 24 * 60 * 60 * 1000, // 24h
-      cleanupInterval: 3600000 // 1h
+      cleanupInterval: 3600000, // 1h
+      candidatePoolFilePath: testCandidatePoolFilePath
     });
   });
 
   afterEach(async () => {
     manager.destroy();
     await rm(testDir, { recursive: true, force: true });
+    // 清理候选池文件
+    if (existsSync(testCandidatePoolFilePath)) {
+      unlinkSync(testCandidatePoolFilePath);
+    }
   });
 
   describe('initialize', () => {

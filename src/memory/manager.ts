@@ -27,6 +27,8 @@ export interface MemoryManagerConfig {
   cleanupInterval?: number;
   /** 晋升重要性阈值，默认 0.5 */
   promotionThreshold?: number;
+  /** 候选池持久化文件路径（可选，默认 ~/.miniclaw/candidate-pool.json） */
+  candidatePoolFilePath?: string;
 }
 
 /**
@@ -77,9 +79,13 @@ export class MemoryManager {
 
     // 初始化所有组件
     this.sessionManager = new SessionManager();
-    this.candidatePool = new MemoryCandidatePool(this.sessionManager, {
-      defaultTTL: config.defaultTTL
-    });
+    this.candidatePool = new MemoryCandidatePool(
+      this.sessionManager,
+      {
+        defaultTTL: config.defaultTTL
+      },
+      config.candidatePoolFilePath
+    );
     this.longTerm = new LongTermMemory(config.storageDir);
     this.embeddingService = new EmbeddingService();
 
@@ -266,6 +272,8 @@ export class MemoryManager {
    * 销毁资源
    */
   destroy(): void {
+    // 先持久化候选池数据
+    this.candidatePool.persist();
     this.ttlManager.stop();
     this.candidatePool.clear();
     this.longTerm.clear();

@@ -100,6 +100,9 @@ export class TaskExecutor {
   private async executeReminder(
     task: ScheduledTask
   ): Promise<{ success: boolean; status: 'executed' | 'waiting-push' }> {
+    console.log(`[TaskExecutor] 📤 发送提醒消息到 ${task.channel}...`);
+    console.log(`[TaskExecutor] 📝 内容长度: ${task.content.length} 字符`);
+
     const result = await this.callbacks.sendMessage(
       task.userId,
       task.channel,
@@ -111,6 +114,8 @@ export class TaskExecutor {
       if (result.messageId && this.onMessageSent) {
         this.onMessageSent(result.messageId);
       }
+      console.log(`[TaskExecutor] ✅ 消息发送成功! messageId=${result.messageId}`);
+      console.log(`[TaskExecutor] 📱 用户应已收到飞书消息\n`);
       this.executionLogStore.record(
         task.taskId,
         'success',
@@ -120,6 +125,7 @@ export class TaskExecutor {
       this.markExecuted(task.taskId, task.taskType);
       return { success: true, status: 'executed' };
     } else {
+      console.log(`[TaskExecutor] ⚠️ 消息发送失败，用户可能离线，存入待推送队列`);
       // 用户离线，存入待推送
       this.executionLogStore.record(
         task.taskId,
@@ -142,9 +148,13 @@ export class TaskExecutor {
   ): Promise<{ success: boolean; status: 'executed' | 'failed' | 'pending' }> {
     if (!task.actionParams?.agentId) {
       // 无目标 Agent，标记失败
+      console.log(`[TaskExecutor] ❌ 任务 ${task.taskId.slice(0, 8)} 无 agentId，跳过执行`);
       this.markFailed(task.taskId, 'No agentId specified');
       return { success: false, status: 'failed' };
     }
+
+    console.log(`[TaskExecutor] 🤖 启动子 Agent: ${task.actionParams.agentId}`);
+    console.log(`[TaskExecutor] 📋 任务内容: ${task.content.substring(0, 100)}${task.content.length > 100 ? '...' : ''}`);
 
     const result = await this.callbacks.spawnAgent({
       task: task.content,
@@ -152,23 +162,36 @@ export class TaskExecutor {
     });
 
     if (result.success) {
+      console.log(`[TaskExecutor] ✅ 子 Agent 执行成功`);
       // 子代理执行成功，将结果发送给用户
       if (result.result) {
+        console.log(`[TaskExecutor] 📤 发送执行结果到飞书...`);
+        console.log(`[TaskExecutor] 📝 结果长度: ${result.result.length} 字符`);
+
         const sendResult = await this.callbacks.sendMessage(
           task.userId,
           task.channel,
           result.result
         );
-        if (sendResult.success && sendResult.messageId && this.onMessageSent) {
-          this.onMessageSent(sendResult.messageId);
+
+        if (sendResult.success) {
+          console.log(`[TaskExecutor] ✅ 结果消息发送成功! messageId=${sendResult.messageId}`);
+          console.log(`[TaskExecutor] 📱 用户应已收到飞书消息\n`);
+          if (sendResult.messageId && this.onMessageSent) {
+            this.onMessageSent(sendResult.messageId);
+          }
+        } else {
+          console.log(`[TaskExecutor] ⚠️ 结果消息发送失败`);
         }
+
         this.executionLogStore.record(
           task.taskId,
           'success',
           task.channel,
-          true
+          sendResult.success
         );
       } else {
+        console.log(`[TaskExecutor] ⚠️ Agent 执行成功但无返回内容`);
         this.executionLogStore.record(
           task.taskId,
           'success',
@@ -180,6 +203,7 @@ export class TaskExecutor {
       this.markExecuted(task.taskId, task.taskType);
       return { success: true, status: 'executed' };
     } else {
+      console.log(`[TaskExecutor] ❌ 子 Agent 执行失败: ${result.error}`);
       this.executionLogStore.record(
         task.taskId,
         'failed',
