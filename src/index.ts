@@ -181,8 +181,20 @@ function createAgentFactory(
     const currentDatePrompt = `\n\n# currentDate\n当前日期时间：${currentDate}（中国标准时间 CST, UTC+8）`;
     systemPrompt = `${systemPrompt}${currentDatePrompt}`;
 
-    // 注入定时任务系统信息（让 LLM 知道定时任务存储位置）
-    const schedulerInfo = `\n\n# 定时任务系统\n- 定时任务存储位置：~/.miniclaw/scheduled-tasks.json\n- 使用 scheduler_list 工具查看当前定时任务清单\n- 使用 scheduler_create 工具创建新定时任务\n- 使用 scheduler_delete 工具删除定时任务\n- 使用 scheduler_logs 工具查看执行日志`;
+    // 注入定时任务系统信息和当前任务清单
+    const pendingTasks = taskStore.getByStatus('pending');
+    let schedulerInfo = `\n\n# 定时任务系统\n存储位置：~/.miniclaw/scheduled-tasks.json\n工具：scheduler_list、scheduler_create、scheduler_delete、scheduler_logs`;
+    if (pendingTasks.length > 0) {
+      schedulerInfo += `\n\n## 当前待执行的定时任务（共 ${pendingTasks.length} 个）：`;
+      pendingTasks.forEach((task, index) => {
+        const timeInfo = task.taskType === 'recurring'
+          ? `周期性：${task.executeTime}`
+          : `一次性：${task.executeTime}`;
+        schedulerInfo += `\n${index + 1}. [${task.summary}] ${timeInfo} | 类型：${task.actionType} | 状态：${task.status}`;
+      });
+    } else {
+      schedulerInfo += `\n\n当前没有待执行的定时任务。`;
+    }
     systemPrompt = `${systemPrompt}${schedulerInfo}`;
 
     // 构建提示词组成部分
