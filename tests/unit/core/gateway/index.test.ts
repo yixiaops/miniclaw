@@ -211,7 +211,7 @@ describe('MiniclawGateway', () => {
       };
 
       await gateway.handleMessage(ctx);
-      gateway.destroySession('session-cli');
+      gateway.destroySession('agent:main:channel:cli');
 
       const status = gateway.getStatus();
       expect(status.agentCount).toBe(0);
@@ -221,11 +221,14 @@ describe('MiniclawGateway', () => {
 
   describe('initialize', () => {
     it('应该从存储加载 Session 历史', async () => {
+      // 使用动态目录名避免残留数据
+      const storageDir = '/tmp/miniclaw-test-init-' + Date.now();
+
       // 创建带有自定义存储目录的 gateway
       const initCreateAgentFn = vi.fn(() => createMockAgent());
       const initGateway = new MiniclawGateway(mockConfig, {
         createAgentFn: initCreateAgentFn,
-        storageDir: '/tmp/miniclaw-test-init'
+        storageDir
       });
 
       // 先创建一个 session 并保存消息
@@ -238,7 +241,7 @@ describe('MiniclawGateway', () => {
       const newCreateAgentFn = vi.fn(() => createMockAgent());
       const newGateway = new MiniclawGateway(mockConfig, {
         createAgentFn: newCreateAgentFn,
-        storageDir: '/tmp/miniclaw-test-init'
+        storageDir
       });
 
       // 初始化应该加载之前的 session
@@ -335,7 +338,7 @@ describe('MiniclawGateway', () => {
       expect(result).toHaveProperty('agent');
       expect(result).toHaveProperty('sessionId');
       expect(result.agent).toBeDefined();
-      expect(result.sessionId).toBe('session-cli');
+      expect(result.sessionId).toBe('agent:main:channel:cli');
     });
 
     it('应该创建对应的 Session', () => {

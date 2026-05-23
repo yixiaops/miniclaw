@@ -29,7 +29,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-user-123');
+      expect(sessionId).toBe('agent:main:channel:feishu:peer:123');
     });
 
     it('应该按群组 ID 路由', () => {
@@ -39,7 +39,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-group-456');
+      expect(sessionId).toBe('agent:main:channel:feishu:group:456');
     });
 
     it('应该按通道类型路由（CLI）', () => {
@@ -48,7 +48,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-cli');
+      expect(sessionId).toBe('agent:main:channel:cli');
     });
 
     it('API 通道应该按 clientId 路由', () => {
@@ -58,7 +58,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-api-client-789');
+      expect(sessionId).toBe('agent:main:channel:api:peer:client-789');
     });
 
     it('API 通道无 clientId 时应该使用默认', () => {
@@ -67,7 +67,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-api-default');
+      expect(sessionId).toBe('agent:main:channel:api:peer:default');
     });
   });
 
@@ -147,7 +147,7 @@ describe('Router', () => {
       });
 
       // 无匹配规则，使用默认策略
-      expect(sessionId).toBe('session-user-123');
+      expect(sessionId).toBe('agent:main:channel:feishu:peer:123');
     });
   });
 
@@ -184,7 +184,7 @@ describe('Router', () => {
       });
 
       // 规则已移除，使用默认策略
-      expect(sessionId).toBe('session-cli');
+      expect(sessionId).toBe('agent:main:channel:cli');
     });
   });
 
@@ -203,7 +203,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-group-456');
+      expect(sessionId).toBe('agent:main:channel:feishu:group:456');
     });
 
     it('byUser 策略应该优先使用用户 ID', async () => {
@@ -220,7 +220,7 @@ describe('Router', () => {
         content: 'Hello'
       });
 
-      expect(sessionId).toBe('session-user-123');
+      expect(sessionId).toBe('agent:main:channel:feishu:peer:123');
     });
   });
 

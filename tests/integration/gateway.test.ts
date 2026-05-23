@@ -351,7 +351,7 @@ describe('Gateway Integration', () => {
       expect(sessions.length).toBeGreaterThan(0);
 
       // 加载消息
-      const messages = await storage.load('session-cli');
+      const messages = await storage.load('agent:main:channel:cli');
       expect(messages.length).toBe(2); // user + assistant
       expect(messages[0].role).toBe('user');
       expect(messages[0].content).toBe('测试消息');
@@ -390,7 +390,7 @@ describe('Gateway Integration', () => {
 
       // 验证 Session 已恢复
       const sessionManager = gateway2.getSessionManager();
-      const session = sessionManager.get('session-cli');
+      const session = sessionManager.get('agent:main:channel:cli');
 
       expect(session).toBeDefined();
       expect(session!.messages.length).toBe(4); // 2 user + 2 assistant

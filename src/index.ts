@@ -141,6 +141,19 @@ function createAgentFactory(
       } else if (scope.type === 'channel') {
         channel = (scope as ChannelScope).channel as 'cli' | 'api' | 'web' | 'feishu';
       }
+    } else if (sessionKey.startsWith('session-user-')) {
+      // 兼容旧格式：session-user-{userId}
+      userId = sessionKey.replace('session-user-', '');
+      channel = 'feishu'; // 默认飞书，实际应由 Gateway 传入
+    } else if (sessionKey.startsWith('session-api-')) {
+      // 兼容旧格式：session-api-{clientId}
+      channel = 'api';
+    } else if (sessionKey.startsWith('session-cli')) {
+      // 兼容旧格式：session-cli
+      channel = 'cli';
+    } else if (sessionKey.startsWith('session-group-')) {
+      // 兼容旧格式：session-group-{groupId}
+      channel = 'feishu';
     }
 
     // 使用预加载的提示词（如果存在）
