@@ -180,39 +180,39 @@ export class Router {
   private defaultRoute(ctx: RouteContext): string {
     // CLI 通道：固定 Session
     if (ctx.channel === 'cli') {
-      return 'session-cli';
+      return 'agent:main:channel:cli';
     }
 
     // API 通道：按 clientId 隔离
     if (ctx.channel === 'api') {
-      return `session-api-${ctx.clientId || 'default'}`;
+      return `agent:main:channel:api:peer:${ctx.clientId || 'default'}`;
     }
 
     // Web 通道：按 clientId 隔离
     if (ctx.channel === 'web') {
-      return `session-web-${ctx.clientId || 'default'}`;
+      return `agent:main:channel:web:peer:${ctx.clientId || 'default'}`;
     }
 
     // Feishu 等其他通道：根据策略路由
     if (this.defaultStrategy === 'byGroup') {
       // 优先群组 ID
       if (ctx.groupId) {
-        return `session-group-${ctx.groupId}`;
+        return `agent:main:channel:${ctx.channel}:group:${ctx.groupId}`;
       }
       if (ctx.userId) {
-        return `session-user-${ctx.userId}`;
+        return `agent:main:channel:${ctx.channel}:peer:${ctx.userId}`;
       }
     } else {
       // byUser：优先用户 ID
       if (ctx.userId) {
-        return `session-user-${ctx.userId}`;
+        return `agent:main:channel:${ctx.channel}:peer:${ctx.userId}`;
       }
       if (ctx.groupId) {
-        return `session-group-${ctx.groupId}`;
+        return `agent:main:channel:${ctx.channel}:group:${ctx.groupId}`;
       }
     }
 
     // 兜底：使用通道名
-    return `session-${ctx.channel}`;
+    return `agent:main:channel:${ctx.channel}`;
   }
 }
