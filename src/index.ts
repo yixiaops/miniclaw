@@ -168,6 +168,23 @@ function createAgentFactory(
       console.log(`[Gateway] 已注入 Soul 内容: chars=${soulContent.length}`);
     }
 
+    // 注入 currentDate 到系统提示（让 LLM 知道当前时间）
+    const currentDate = new Date().toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      weekday: 'long'
+    });
+    const currentDatePrompt = `\n\n# currentDate\n当前日期时间：${currentDate}（中国标准时间 CST, UTC+8）`;
+    systemPrompt = `${systemPrompt}${currentDatePrompt}`;
+
+    // 注入定时任务系统信息（让 LLM 知道定时任务存储位置）
+    const schedulerInfo = `\n\n# 定时任务系统\n- 定时任务存储位置：~/.miniclaw/scheduled-tasks.json\n- 使用 scheduler_list 工具查看当前定时任务清单\n- 使用 scheduler_create 工具创建新定时任务\n- 使用 scheduler_delete 工具删除定时任务\n- 使用 scheduler_logs 工具查看执行日志`;
+    systemPrompt = `${systemPrompt}${schedulerInfo}`;
+
     // 构建提示词组成部分
     const promptComponents: PromptComponent[] = [];
 
