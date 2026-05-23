@@ -3,18 +3,26 @@
  * 处理跨平台路径兼容问题
  */
 
+import { homedir } from 'os';
+
 /**
- * 规范化路径，处理 Git Bash / WSL 风格的 Unix 路径
+ * 规范化路径，处理 ~ 展开、Git Bash / WSL 风格的 Unix 路径
  *
- * Windows 上 Git Bash 返回的路径格式: /c/Users/xxx
- * 需要转换为 Windows 格式: C:\Users\xxx
+ * 1. 展开 ~ 为用户主目录
+ * 2. Windows 上 Git Bash 返回的路径格式: /c/Users/xxx
+ *    需要转换为 Windows 格式: C:\Users\xxx
  *
- * Linux/macOS 不受影响，路径原样返回
+ * Linux/macOS Git Bash 路径转换不受影响，路径原样返回
  *
  * @param p - 原始路径字符串
  * @returns 规范化后的路径
  */
 export function normalizePath(p: string): string {
+  // 展开 ~ 为用户主目录
+  if (p.startsWith('~')) {
+    p = homedir() + p.slice(1);
+  }
+
   // 仅在 Windows 上启用转换
   if (process.platform !== 'win32') {
     return p;
