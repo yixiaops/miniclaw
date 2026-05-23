@@ -82,4 +82,44 @@ describe('normalizePath', () => {
 
     vi.unstubAllGlobals();
   });
+
+  it('should expand ~ to home directory on Linux', () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux' });
+
+    const home = require('os').homedir();
+    expect(normalizePath('~/.miniclaw/config.json')).toBe(`${home}/.miniclaw/config.json`);
+    expect(normalizePath('~/test.txt')).toBe(`${home}/test.txt`);
+    expect(normalizePath('~')).toBe(home);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('should expand ~ to home directory on macOS', () => {
+    vi.stubGlobal('process', { ...process, platform: 'darwin' });
+
+    const home = require('os').homedir();
+    expect(normalizePath('~/.miniclaw/scheduled-tasks.json')).toBe(`${home}/.miniclaw/scheduled-tasks.json`);
+    expect(normalizePath('~Documents/file.md')).toBe(`${home}Documents/file.md`);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('should expand ~ then convert Git Bash path on Windows', () => {
+    vi.stubGlobal('process', { ...process, platform: 'win32' });
+
+    const home = require('os').homedir();
+    expect(normalizePath('~/.miniclaw/config.json')).toBe(`${home}/.miniclaw/config.json`);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('should not expand ~ in middle of path', () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux' });
+
+    // Only ~ at start should be expanded
+    expect(normalizePath('/home/~user/test')).toBe('/home/~user/test');
+    expect(normalizePath('path/to/~backup')).toBe('path/to/~backup');
+
+    vi.unstubAllGlobals();
+  });
 });
