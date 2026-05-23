@@ -13,6 +13,9 @@ import { LongTermMemory } from '../../../src/memory/store/long-term.js';
 import { SessionManager } from '../../../src/memory/store/session-manager.js';
 import { EmbeddingService } from '../../../src/memory/embedding/index.js';
 import * as fs from 'fs/promises';
+import { unlinkSync, existsSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('MemorySearchTool', () => {
   let searchTool: MemorySearchTool;
@@ -21,11 +24,17 @@ describe('MemorySearchTool', () => {
   let sessionManager: SessionManager;
   let embeddingService: EmbeddingService;
   const testDir = '/tmp/miniclaw-search-test';
+  // 使用独立的候选池文件路径
+  const testCandidatePoolFilePath = join(tmpdir(), 'miniclaw-test-search-candidate-pool.json');
 
   beforeEach(async () => {
+    // 清理候选池文件
+    if (existsSync(testCandidatePoolFilePath)) {
+      unlinkSync(testCandidatePoolFilePath);
+    }
     await fs.mkdir(testDir, { recursive: true });
     sessionManager = new SessionManager();
-    candidatePool = new MemoryCandidatePool(sessionManager);
+    candidatePool = new MemoryCandidatePool(sessionManager, {}, testCandidatePoolFilePath);
     longTerm = new LongTermMemory(testDir);
     embeddingService = new EmbeddingService();
     searchTool = new MemorySearchTool(candidatePool, longTerm, embeddingService);
@@ -34,6 +43,10 @@ describe('MemorySearchTool', () => {
   afterEach(async () => {
     candidatePool.clear();
     await fs.rm(testDir, { recursive: true, force: true });
+    // 清理候选池文件
+    if (existsSync(testCandidatePoolFilePath)) {
+      unlinkSync(testCandidatePoolFilePath);
+    }
   });
 
   describe('search', () => {

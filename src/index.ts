@@ -485,6 +485,10 @@ async function main() {
     memoryManager
   });
 
+  // 初始化 Gateway：加载已保存的 Session 历史
+  await gateway.initialize();
+  console.log('✓ Gateway 已初始化，Session 历史已加载');
+
   // 打印工具和 Agent 信息
   console.log(`已加载 ${getBuiltinTools().length} 个内置工具`);
   console.log(`已加载子代理工具: sessions_spawn, subagents`);

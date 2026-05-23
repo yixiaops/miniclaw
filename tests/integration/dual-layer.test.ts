@@ -18,6 +18,9 @@ import { MemoryWriteTool } from '../../src/memory/tools/write.js';
 import { DeduplicationChecker } from '../../src/memory/write/deduplication.js';
 import { SensitiveDetector } from '../../src/memory/write/sensitive-detector.js';
 import * as fs from 'fs/promises';
+import { unlinkSync, existsSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('Dual-Layer Memory Integration', () => {
   let candidatePool: MemoryCandidatePool;
@@ -29,19 +32,25 @@ describe('Dual-Layer Memory Integration', () => {
   let writeTool: MemoryWriteTool;
   let embeddingService: EmbeddingService;
   const testDir = '/tmp/miniclaw-integration-test';
+  // 使用独立的候选池文件路径
+  const testCandidatePoolFilePath = join(tmpdir(), 'miniclaw-test-dual-layer-pool.json');
 
   beforeEach(async () => {
+    // 清理候选池文件
+    if (existsSync(testCandidatePoolFilePath)) {
+      unlinkSync(testCandidatePoolFilePath);
+    }
     await fs.mkdir(testDir, { recursive: true });
-    
+
     // 初始化所有组件
     sessionManager = new SessionManager();
-    candidatePool = new MemoryCandidatePool(sessionManager);
+    candidatePool = new MemoryCandidatePool(sessionManager, {}, testCandidatePoolFilePath);
     longTerm = new LongTermMemory(testDir);
     embeddingService = new EmbeddingService();
-    
+
     const dedupChecker = new DeduplicationChecker(embeddingService);
     const sensitiveDetector = new SensitiveDetector();
-    
+
     writeTool = new MemoryWriteTool(candidatePool, dedupChecker, sensitiveDetector);
     promoter = new MemoryPromoter(candidatePool, longTerm);
     ttlManager = new TTLManager(candidatePool, promoter);
