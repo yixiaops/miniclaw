@@ -640,8 +640,8 @@ async function main() {
       process.on('SIGINT', () => {
         console.log('\n正在关闭...');
         clearInterval(pollingInterval);
-        schedulerWatcher.stop();
         feishu.stop();
+        schedulerWatcher.stop();
         gateway.cleanup();
         subagentManager.destroy();
         schedulerManager.stopAll();
