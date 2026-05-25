@@ -30,6 +30,7 @@ import { SchedulerManager } from './scheduler/manager.js';
 import { TaskExecutor } from './scheduler/executor.js';
 import { PendingMessageStore } from './scheduler/pending-store.js';
 import { ExecutionLogStore } from './scheduler/execution-log-store.js';
+import { SchedulerWatcher } from './scheduler/watcher.js';
 import { SessionKeyBuilder, type PeerScope, type ChannelScope } from './core/session-key/index.js';
 import { ConfigWatcher, type ConfigChangeEvent } from './config/watcher.js';
 
@@ -602,6 +603,15 @@ async function main() {
       schedulerManager.scheduleAllPending();
       console.log('✓ TaskExecutor 已连接，调度器已加载待执行任务');
 
+      // 启动 SchedulerWatcher（热加载 scheduled-tasks.json）
+      const schedulerWatcher = new SchedulerWatcher({
+        taskStore,
+        schedulerManager,
+        filePath: path.join(schedulerStorageDir, 'scheduled-tasks.json'),
+      });
+      await schedulerWatcher.start();
+      console.log('✓ SchedulerWatcher 已启动，支持任务配置热加载');
+
       // 连接 executor → WebSocket 的 sentMessageIds，防止回声循环
       const websocket = feishu.getWebSocket();
       executor.setOnMessageSent((messageId: string) => {
@@ -631,6 +641,7 @@ async function main() {
         console.log('\n正在关闭...');
         clearInterval(pollingInterval);
         feishu.stop();
+        schedulerWatcher.stop();
         gateway.cleanup();
         subagentManager.destroy();
         schedulerManager.stopAll();

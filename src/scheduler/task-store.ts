@@ -42,8 +42,13 @@ export class TaskStore {
 
   /**
    * 从文件加载任务数据
+   *
+   * 可用于重新加载文件（如文件监听触发）
    */
-  private load(): void {
+  load(): void {
+    // 先清空旧数据
+    this.tasks.clear();
+
     try {
       if (!fs.existsSync(this.filePath)) {
         // 创建空存储文件
