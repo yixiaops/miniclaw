@@ -29,16 +29,20 @@ export interface SchedulerWatcherOptions {
  * 监听 scheduled-tasks.json 文件变化，自动更新任务调度
  */
 export class SchedulerWatcher {
-  private taskStore: TaskStore;
-  private schedulerManager: SchedulerManager;
-  private filePath: string;
-  private debounceDelay: number;
+  // @ts-expect-error TODO: will be used in task 2 (chokidar implementation)
+  private _taskStore: TaskStore;
+  // @ts-expect-error TODO: will be used in task 2 (chokidar implementation)
+  private _schedulerManager: SchedulerManager;
+  // @ts-expect-error TODO: will be used in task 2 (chokidar implementation)
+  private _filePath: string;
+  // @ts-expect-error TODO: will be used in task 2 (chokidar implementation)
+  private _debounceDelay: number;
 
   constructor(options: SchedulerWatcherOptions) {
-    this.taskStore = options.taskStore;
-    this.schedulerManager = options.schedulerManager;
-    this.filePath = options.filePath || '';
-    this.debounceDelay = options.debounceDelay ?? 1000;
+    this._taskStore = options.taskStore;
+    this._schedulerManager = options.schedulerManager;
+    this._filePath = options.filePath || '';
+    this._debounceDelay = options.debounceDelay ?? 1000;
   }
 
   /**
