@@ -11,6 +11,8 @@ export { PendingMessageStore } from './pending-store.js';
 export { ExecutionLogStore } from './execution-log-store.js';
 export { SchedulerManager } from './manager.js';
 export { TaskExecutor } from './executor.js';
+export { SchedulerWatcher } from './watcher.js';
+export type { SchedulerWatcherOptions } from './watcher.js';
 export {
   calculateSimilarity,
   isDuplicateTask,
