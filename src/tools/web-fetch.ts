@@ -5,6 +5,12 @@
 import { Type, type Static } from '@sinclair/typebox';
 
 /**
+ * 最大内容大小（字符数）
+ * 防止超大 HTML 导致 context 爆炸
+ */
+const MAX_CONTENT_SIZE = 50000; // 50K 字符
+
+/**
  * 工具参数 schema
  */
 const WebFetchParamsSchema = Type.Object({
@@ -29,6 +35,8 @@ export const webFetchTool = {
   label: '抓取网页',
   description: '抓取指定 URL 的网页内容',
   parameters: WebFetchParamsSchema,
+  /** 最大内容大小（用于测试验证和文档） */
+  maxContentSize: MAX_CONTENT_SIZE,
 
   /**
    * 执行网页抓取
@@ -73,7 +81,14 @@ export const webFetchTool = {
       }
 
       // 获取内容
-      const content = await response.text();
+      let content = await response.text();
+
+      // 截断超大内容
+      if (content.length > MAX_CONTENT_SIZE) {
+        const originalSize = content.length;
+        content = content.substring(0, MAX_CONTENT_SIZE) +
+          `\n\n... (内容过长已截断，原始大小: ${originalSize} 字符，已保留: ${MAX_CONTENT_SIZE} 字符)`;
+      }
 
       return {
         content: [{ type: 'text', text: content }],

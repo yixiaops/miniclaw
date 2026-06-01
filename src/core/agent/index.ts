@@ -179,7 +179,7 @@ export const DEFAULT_SYSTEM_PROMPT = `你是 Miniclaw,一个专业、可靠的 A
  * @param text - 要估算的文本
  * @returns 估算的 token 数量
  */
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
   if (!text || text.length === 0) {
     return 0;
   }
@@ -205,7 +205,7 @@ function estimateTokens(text: string): number {
  * @param messages - 消息列表
  * @returns 估算的 token 数量
  */
-function estimateMessagesTokens(messages: AgentMessage[]): number {
+export function estimateMessagesTokens(messages: AgentMessage[]): number {
   let totalTokens = 0;
 
   for (const message of messages) {
@@ -226,6 +226,56 @@ function estimateMessagesTokens(messages: AgentMessage[]): number {
   }
 
   return totalTokens;
+}
+
+/**
+ * 截断消息列表以适配上下文窗口
+ *
+ * 从最旧的非 system 消息开始移除，直到总 token 数在可用范围内。
+ * 保底至少保留 minKeep 条消息。
+ *
+ * @param messages - 消息列表（会被原地修改）
+ * @param contextWindow - 上下文窗口大小
+ * @param systemPrompt - 系统提示词
+ * @param minKeep - 最少保留的消息数（默认 10）
+ * @returns 被截断的消息数量
+ */
+export function truncateMessages(
+  messages: AgentMessage[],
+  contextWindow: number,
+  systemPrompt: string,
+  minKeep: number = 10
+): number {
+  const maxTokens = Math.floor(contextWindow * 0.75); // 保留 25% 给输出
+  const systemTokens = estimateTokens(systemPrompt);
+  const availableTokens = maxTokens - systemTokens;
+
+  if (!messages || messages.length === 0) return 0;
+
+  let totalTokens = estimateMessagesTokens(messages);
+  if (totalTokens <= availableTokens) return 0;
+
+  let truncatedCount = 0;
+
+  // 从最旧的非 system 消息开始移除
+  while (messages.length > 2 && totalTokens > availableTokens) {
+    const idx = messages.findIndex(m => m.role !== 'system');
+    if (idx === -1 || idx === messages.length - 1) break;
+    const removed = messages.splice(idx, 1)[0];
+    totalTokens -= estimateMessagesTokens([removed]);
+    truncatedCount++;
+  }
+
+  // 保底：至少保留最后 minKeep 条
+  while (messages.length > minKeep && totalTokens > availableTokens) {
+    const idx = messages.findIndex(m => m.role !== 'system');
+    if (idx === -1 || idx === messages.length - 1) break;
+    const removed = messages.splice(idx, 1)[0];
+    totalTokens -= estimateMessagesTokens([removed]);
+    truncatedCount++;
+  }
+
+  return truncatedCount;
 }
 
 /**
@@ -415,6 +465,9 @@ export class MiniclawAgent {
   /** 提示词组成部分 */
   private promptComponents: PromptComponent[] = [];
 
+  /** transformContext 是否已配置（用于测试验证） */
+  public transformContextConfigured: boolean = false;
+
   /**
    * 获取日志前缀
    *
@@ -516,8 +569,16 @@ export class MiniclawAgent {
           ...opts,
           apiKey: config.bailian.apiKey
         });
+      },
+      // transformContext: 在每次 LLM 聊用前截断消息历史
+      // 防止工具返回的大内容导致 context 爆炸
+      transformContext: async (messages: AgentMessage[], signal?: AbortSignal) => {
+        return this.transformContext(messages);
       }
     });
+
+    // 标记 transformContext 已配置
+    this.transformContextConfigured = true;
 
     // 保存工具引用
     if (options?.tools) {
@@ -596,6 +657,81 @@ export class MiniclawAgent {
   }
 
   // ==========================================================================
+  // 上下文窗口截断
+  // ==========================================================================
+
+  /**
+   * 截断消息历史，使其适配模型的上下文窗口。
+   *
+   * 在每次调用 prompt() 前执行，防止消息无限增长导致 API 400 错误。
+   * 策略：
+   * - 保留 system prompt
+   * - 保留 75% 上下文窗口给输入消息
+   * - 从最旧的非 system 消息开始移除
+   * - 保底至少保留 10 条最近消息
+   *
+   * @private
+   */
+  private truncateMessagesToContextWindow(): void {
+    const model = this.agent.state.model;
+    const contextWindow = model?.contextWindow || 128000;
+    const systemPrompt = this.agent.state.systemPrompt ?? '';
+    const messages = this.agent.state.messages;
+
+    const truncatedCount = truncateMessages(messages, contextWindow, systemPrompt);
+
+    if (truncatedCount > 0) {
+      const totalTokens = estimateMessagesTokens(messages);
+      const systemTokens = estimateTokens(systemPrompt);
+      const usedPct = ((totalTokens + systemTokens) / contextWindow * 100).toFixed(0);
+      this.log(
+        `📊 上下文窗口: ${contextWindow}, 已用: ${totalTokens + systemTokens} (${usedPct}%), 截断: ${truncatedCount} 条消息`
+      );
+    }
+  }
+
+  /**
+   * transformContext: 在每次 LLM 调用前截断消息历史
+   *
+   * 这个方法被 pi-agent-core 的 agentLoop 在每次调用 LLM 前调用，
+   * 用于动态控制上下文大小，防止工具返回的大内容导致 context 爆炸。
+   *
+   * @param messages - 当前消息列表
+   * @returns 截断后的消息列表
+   */
+  private transformContext(messages: AgentMessage[]): AgentMessage[] {
+    const model = this.agent.state.model;
+    const contextWindow = model?.contextWindow || 128000;
+    const systemPrompt = this.agent.state.systemPrompt ?? '';
+
+    // 计算当前 token 数
+    const totalTokens = estimateMessagesTokens(messages);
+    const systemTokens = estimateTokens(systemPrompt);
+    const maxTokens = Math.floor(contextWindow * 0.75); // 保留 25% 给输出
+
+    // 未超限，直接返回
+    if (totalTokens + systemTokens <= maxTokens) {
+      return messages;
+    }
+
+    // 超限，需要截断
+    this.log(`⚠️ transformContext 触发: ${totalTokens + systemTokens} tokens > ${maxTokens} 阈值`);
+
+    // 复制消息数组（避免修改原数组）
+    const messagesCopy = messages.slice();
+
+    // 应用截断
+    const truncatedCount = truncateMessages(messagesCopy, contextWindow, systemPrompt);
+
+    if (truncatedCount > 0) {
+      const newTokens = estimateMessagesTokens(messagesCopy);
+      this.log(`✅ transformContext 完成: 截断 ${truncatedCount} 条消息, ${totalTokens + systemTokens} → ${newTokens + systemTokens} tokens`);
+    }
+
+    return messagesCopy;
+  }
+
+  // ==========================================================================
   // 核心对话方法
   // ==========================================================================
 
@@ -607,17 +743,21 @@ export class MiniclawAgent {
    *
    * ## 内部流程
    *
-   * 1. 打印发送上下文(日志)
-   * 2. 订阅 Agent 事件
-   * 3. 调用 agent.prompt() 发送消息
-   * 4. 收集流式响应内容
-   * 5. 打印接收详情(日志)
-   * 6. 返回完整响应
+   * 1. 截断消息历史（防止上下文窗口溢出）
+   * 2. 打印发送上下文(日志)
+   * 3. 订阅 Agent 事件
+   * 4. 调用 agent.prompt() 发送消息
+   * 5. 收集流式响应内容
+   * 6. 打印接收详情(日志)
+   * 7. 返回完整响应
    *
    * @param input - 用户输入
    * @returns 包含响应内容的 Promise
    */
   async chat(input: string): Promise<{ content: string }> {
+    // 截断消息历史，防止上下文窗口溢出
+    this.truncateMessagesToContextWindow();
+
     this.log(`═════════════ 开始对话 ═════════════`);
 
     // ===== 发送前:打印上下文 =====
@@ -767,6 +907,9 @@ export class MiniclawAgent {
    * @yields 流式响应事件
    */
   async *streamChat(input: string): AsyncGenerator<StreamChatEvent> {
+    // 截断消息历史，防止上下文窗口溢出
+    this.truncateMessagesToContextWindow();
+
     this.log(`═════════════ 开始流式对话 ═════════════`);
 
     // ===== 发送前:打印上下文 =====
